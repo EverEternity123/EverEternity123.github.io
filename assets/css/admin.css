@@ -366,6 +366,99 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   color: var(--accent);
 }
 
+.pill-hidden {
+  background: rgba(192, 57, 43, .1);
+  color: #c0392b;
+}
+
+.pill-author {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+/* 被隐藏的文章在列表里淡一点，一眼能区分 */
+.admin-list li.is-hidden .ttl { color: var(--text-2); }
+
+/* ---------- 复选框（自定义样式，原生 checkbox 藏起来） ---------- */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 4px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.check input {
+  position: absolute;
+  opacity: 0;
+  width: 0; height: 0;
+}
+
+.check .check-box {
+  flex: none;
+  width: 21px; height: 21px;
+  margin-top: 1px;
+  border: 1.5px solid var(--border-2);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: background .15s, border-color .15s;
+}
+
+.check .check-box svg {
+  width: 14px; height: 14px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity .15s, transform .15s;
+}
+
+.check input:checked ~ .check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check input:checked ~ .check-box svg { opacity: 1; transform: scale(1); }
+.check input:focus-visible ~ .check-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.check .check-text { font-size: 13.5px; line-height: 1.6; }
+.check .check-text b { display: block; font-weight: 600; color: var(--text); }
+.check .check-text em {
+  font-style: normal;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.check .check-text code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- 保险箱（密码）---------- */
+.vault-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-3);
+}
+
+.vault-links {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.vault-links .btn { font-size: 13.5px; }
+
+#legacy-banner { margin-bottom: 16px; }
+
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
   .field-row { flex-direction: column; gap: 0; }

@@ -8,6 +8,10 @@
 
   var DATA_URL = 'data/posts.json';
 
+  /* 与 write.config.js 里的 defaultAuthor 保持一致。
+     卡片上只在作者跟它不一样时才显示作者，免得每张卡片都在重复同一行字。 */
+  var DEFAULT_AUTHOR = 'Ever Eternity';
+
   var POSTS = [];
 
   var MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月',
@@ -16,6 +20,16 @@
   /* ---------- 工具 ---------- */
 
   function $(sel, ctx) { return (ctx || document).querySelector(sel); }
+
+  /* 写作台里勾了「隐藏」的文章：不进列表、不进归档、不进标签，
+     但 post.html?p=<id> 直接打开仍然看得到（方便自己预览） */
+  function isHidden(p) { return p.hidden === true; }
+
+  function visiblePosts() {
+    return POSTS.filter(function (p) { return !isHidden(p); });
+  }
+
+  function authorOf(p) { return p.author || DEFAULT_AUTHOR; }
 
   function fmtDate(iso, style) {
     var p = String(iso || '').split('-');
@@ -40,15 +54,15 @@
     return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
   }
 
-  function allTags() {
-    var seen = {}, list = [];
-    POSTS.forEach(function (p) {
+  function allTags(list) {
+    var seen = {}, out = [];
+    (list || POSTS).forEach(function (p) {
       (p.tags || []).forEach(function (t) {
-        if (!seen[t]) { seen[t] = 0; list.push(t); }
+        if (!seen[t]) { seen[t] = 0; out.push(t); }
         seen[t]++;
       });
     });
-    return { list: list, count: seen };
+    return { list: out, count: seen };
   }
 
   /* ---------- 数据加载 ---------- */
@@ -98,6 +112,11 @@
       return '<span class="tag">' + MD.escape(t) + '</span>';
     }).join('');
 
+    // 只有作者不是站主时才显示，免得每张卡片重复同一个名字
+    var author = p.author && p.author !== DEFAULT_AUTHOR
+      ? '<span class="dot"></span><span class="byline">' + MD.escape(p.author) + '</span>'
+      : '';
+
     return '' +
       '<a class="post-card reveal" href="' + postUrl(p.id) + '">' +
         '<h3>' + MD.escape(p.title) + '</h3>' +
@@ -106,6 +125,7 @@
           '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
           '<span class="dot"></span>' +
           '<span>' + MD.readingTime(p.content) + ' 分钟</span>' +
+          author +
           (tags ? '<span class="dot"></span>' + tags : '') +
         '</div>' +
       '</a>';
@@ -161,14 +181,15 @@
     var listEl = $('#post-list');
     if (!listEl) return;
 
-    var tags = allTags();
+    var shown = visiblePosts();
+    var tags = allTags(shown);
     var tagbarEl = $('#tagbar');
     var searchEl = $('#search');
     var state = { tag: '', q: '' };
 
     if (tagbarEl) {
       var html = '<button class="tag-btn on" data-tag="">全部<span class="count">' +
-                 POSTS.length + '</span></button>';
+                 shown.length + '</span></button>';
       tags.list.forEach(function (t) {
         html += '<button class="tag-btn" data-tag="' + MD.escape(t) + '">' +
                 MD.escape(t) + '<span class="count">' + tags.count[t] + '</span></button>';
@@ -202,9 +223,9 @@
     }
 
     function render() {
-      var result = POSTS.filter(match);
+      var result = shown.filter(match);
       if (!result.length) {
-        listEl.innerHTML = POSTS.length
+        listEl.innerHTML = shown.length
           ? '<div class="empty">没有找到相关的文章。</div>'
           : '<div class="empty">还没有文章。去 <a href="write.html" ' +
             'style="color:var(--accent)">写作台</a> 写第一篇吧。</div>';
@@ -222,8 +243,10 @@
     var bodyEl = $('#post-body');
     if (!bodyEl) return;
 
+    var shown = visiblePosts();
     var id = param('p');
-    var post = id ? byId(id) : POSTS[0];
+    // 隐藏的文章不在列表里，但知道链接就打得开（方便自己先看看效果）
+    var post = id ? byId(id) : (shown[0] || POSTS[0]);
     var wrap = $('#post-main');
 
     if (!post) {
@@ -240,7 +263,19 @@
 
     $('#post-title').textContent = post.title;
     $('#post-date').textContent = fmtDate(post.date, 'long');
+    $('#post-author').textContent = authorOf(post);
     $('#post-time').textContent = MD.readingTime(post.content) + ' 分钟';
+
+    // 隐藏的文章：只在直接打开时提醒一下，列表里根本看不到
+    if (isHidden(post) && wrap) {
+      var header = $('.post-header', wrap);
+      var note = document.createElement('div');
+      note.className = 'hidden-note';
+      note.innerHTML = '这篇还没公开 —— 它不会出现在首页、归档和标签里，' +
+                       '只有拿到这个链接才能看到。';
+      if (header) wrap.insertBefore(note, header);
+      else wrap.appendChild(note);
+    }
 
     var ledeEl = $('#post-lede');
     if (ledeEl) {
@@ -258,22 +293,26 @@
 
     bodyEl.innerHTML = MD.render(post.content);
 
-    // 上一篇 / 下一篇
-    var idx = POSTS.indexOf(post);
-    var newer = idx > 0 ? POSTS[idx - 1] : null;
-    var older = idx < POSTS.length - 1 ? POSTS[idx + 1] : null;
+    // 上一篇 / 下一篇。只在公开的文章之间走，免得把隐藏的标题漏出去
     var navEl = $('#post-nav');
     if (navEl) {
-      var out = '';
-      out += older
-        ? '<a class="prev" href="' + postUrl(older.id) + '"><span class="dir">← 上一篇</span>' +
-          '<span class="ttl">' + MD.escape(older.title) + '</span></a>'
-        : '<span></span>';
-      out += newer
-        ? '<a class="next" href="' + postUrl(newer.id) + '"><span class="dir">下一篇 →</span>' +
-          '<span class="ttl">' + MD.escape(newer.title) + '</span></a>'
-        : '<span></span>';
-      navEl.innerHTML = out;
+      var idx = shown.indexOf(post);
+      if (idx < 0) {
+        navEl.innerHTML = '';
+      } else {
+        var newer = idx > 0 ? shown[idx - 1] : null;
+        var older = idx < shown.length - 1 ? shown[idx + 1] : null;
+        var out = '';
+        out += older
+          ? '<a class="prev" href="' + postUrl(older.id) + '"><span class="dir">← 上一篇</span>' +
+            '<span class="ttl">' + MD.escape(older.title) + '</span></a>'
+          : '<span></span>';
+        out += newer
+          ? '<a class="next" href="' + postUrl(newer.id) + '"><span class="dir">下一篇 →</span>' +
+            '<span class="ttl">' + MD.escape(newer.title) + '</span></a>'
+          : '<span></span>';
+        navEl.innerHTML = out;
+      }
     }
 
     // 阅读进度条
@@ -296,15 +335,16 @@
     if (!el) return;
 
     var stat = $('#archive-stat');
+    var shown = visiblePosts();
 
-    if (!POSTS.length) {
+    if (!shown.length) {
       el.innerHTML = '<div class="empty">还没有文章。</div>';
       if (stat) stat.textContent = '共 0 篇';
       return;
     }
 
     var groups = {}, order = [];
-    POSTS.forEach(function (p) {
+    shown.forEach(function (p) {
       var y = String(p.date).slice(0, 4);
       if (!groups[y]) { groups[y] = []; order.push(y); }
       groups[y].push(p);
@@ -324,16 +364,16 @@
     }).join('');
 
     if (stat) {
-      var words = POSTS.reduce(function (n, p) {
+      var words = shown.reduce(function (n, p) {
         return n + String(p.content || '').replace(/\s+/g, '').length;
       }, 0);
-      stat.textContent = '共 ' + POSTS.length + ' 篇 · 约 ' +
+      stat.textContent = '共 ' + shown.length + ' 篇 · 约 ' +
                          (words / 1000).toFixed(1) + ' 千字';
     }
 
     var cloud = $('#tag-cloud');
     if (cloud) {
-      var t = allTags();
+      var t = allTags(shown);
       cloud.innerHTML = t.list.map(function (tag) {
         return '<a class="chip" href="index.html?tag=' + encodeURIComponent(tag) + '">' +
                MD.escape(tag) + '<span class="count">' + t.count[tag] + '</span></a>';

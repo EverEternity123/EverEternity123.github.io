@@ -224,12 +224,25 @@ python .tools\test-migrate.py
 
 ### 验证线上写作台
 
-用真实令牌跑一遍「连接 → 列文章 → 打开编辑器 → Markdown 预览 → 刷新免登录」，
-全程只读，并在前后各查一次远端 HEAD 证明没有产生提交：
+用真实令牌跑一遍「连接 → 列文章 → 打开编辑器 → Markdown 预览」，
+全程只读，并在前后各查一次提交列表证明没有产生提交：
 
 ```bat
+set VL_PART=main
 <playwright 环境的 python> -u .tools\verify-live.py
 ```
+
+再单独验证「手机上过几天再打开，不用重新贴令牌」：
+
+```bat
+set VL_PART=remember
+<playwright 环境的 python> -u .tools\verify-live.py
+```
+
+**为什么要分两段**：这个环境里 Chromium 必须带 `--single-process`，
+而它在「第二次页面加载」（`reload()` 或新开页面）时会整进程崩掉。
+所以 `remember` 段改成**先把令牌预置进 localStorage 再打开页面**，
+一次加载就够，既绕开崩溃点，也更接近真实使用场景。
 
 验证「保存」链路（真的写一次再清理干净）：
 
@@ -318,6 +331,10 @@ E2E_PART=pages python .tools/screenshot.py    # 只跑页面检查 + 截图
 - **GitHub Pages 免费版要求仓库是公开的**（现在是公开的，别改成私有）。
 - **软性限额**：仓库建议 1GB 以内、每月流量 100GB、每小时最多 10 次构建。
   个人博客完全够用，但别短时间内反复提交十几次。
+- **只有发布清单里的文件会上线**：`*.html`、`assets/`、`data/`、`write.config.js`、
+  `.nojekyll`、`README.md`、`.gitignore`。根目录下别的东西（比如随手放进去的图片）
+  **不会**被推上去 —— 搬迁脚本每次都会把这些列出来提醒你。
+  想让图片能引用，放到 `assets/img/` 下面，正文里写 `![说明](assets/img/文件名)`。
 - **`data/posts.json` 是唯一的内容源**，写作台和本地都改它，两处同时改容易撞车：
   - **在写作台里撞车**：会提示「文件在别处被改过了」，点「刷新」重新读取再保存即可。
   - **在本地推送时撞车**：搬迁脚本会停下并要求你选 `--take-remote` 或

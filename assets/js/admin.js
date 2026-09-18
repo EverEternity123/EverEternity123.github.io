@@ -2,14 +2,24 @@
    admin.js — 写作台逻辑（纯前端，直接读写 GitHub 仓库）
    依赖：markdown.js、write.config.js
    保存 = 向仓库提交一次 commit，托管平台随后自动重新部署
+
+   关于「密码」：
+     令牌不再明文存在浏览器里。第一次用时贴一次令牌 + 自己设一个密码，
+     令牌用 PBKDF2(SHA-256) 派生密钥 + AES-GCM 加密后存进 localStorage；
+     以后打开只输密码，解出来直接用，用完只留在内存里。
+     注意：纯静态网站没有服务端，这个密码只保护「存在这台设备上的令牌」，
+     它不是网站登录，也拦不住别人已经拿到你的令牌。
    ========================================================================== */
 (function () {
   'use strict';
 
   var CFG = window.BLOG_CONFIG || {};
   var API = 'https://api.github.com';
-  var TOKEN_KEY = 'ee-gh-token';
+  var VAULT_KEY = 'ee-gh-vault';        // 加密后的令牌
+  var LEGACY_TOKEN_KEY = 'ee-gh-token'; // 旧版的明文令牌，只用来迁移
   var DRAFT_PREFIX = 'ee-draft:';
+  var PBKDF2_ITER = 210000;
+  var MIN_PASS = 6;
 
   var $ = function (s) { return document.querySelector(s); };
 
@@ -20,7 +30,8 @@
     posts: [],
     editing: null,
     original: null,
-    isNew: true
+    isNew: true,
+    setupMode: false  // true = 显示「贴令牌 + 设密码」的表单
   };
 
   /* ======================================================================
@@ -79,6 +90,107 @@
     var bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
+  }
+
+  /* ======================================================================
+     令牌保险箱：用密码加密令牌，只存在本设备
+     ====================================================================== */
+
+  /* 加密需要 WebCrypto，它只在 https / localhost 下可用 */
+  function cryptoReady() {
+    return !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues);
+  }
+
+  function toB64(bytes) {
+    var chunk = 0x8000, parts = [];
+    for (var i = 0; i < bytes.length; i += chunk) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)));
+    }
+    return btoa(parts.join(''));
+  }
+
+  function fromB64(str) {
+    var bin = atob(String(str || ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function deriveKey(password, salt, iter) {
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
+      .then(function (base) {
+        return crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' },
+          base,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        );
+      });
+  }
+
+  /* 用密码把令牌封起来 */
+  function sealToken(token, password) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return deriveKey(password, salt, PBKDF2_ITER).then(function (key) {
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
+                                   new TextEncoder().encode(token));
+    }).then(function (ct) {
+      return {
+        v: 1,
+        iter: PBKDF2_ITER,
+        salt: toB64(salt),
+        iv: toB64(iv),
+        ct: toB64(new Uint8Array(ct)),
+        at: Date.now()
+      };
+    });
+  }
+
+  /* 用密码把令牌解出来。密码不对时 AES-GCM 校验失败 → 抛错 */
+  function openVault(vault, password) {
+    var salt = fromB64(vault.salt);
+    var iv = fromB64(vault.iv);
+    return deriveKey(password, salt, vault.iter || PBKDF2_ITER).then(function (key) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, fromB64(vault.ct));
+    }).then(function (pt) {
+      return new TextDecoder().decode(pt);
+    });
+  }
+
+  function readVault() {
+    try {
+      var raw = localStorage.getItem(VAULT_KEY);
+      if (!raw) return null;
+      var v = JSON.parse(raw);
+      return (v && v.v === 1 && v.salt && v.iv && v.ct) ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function writeVault(vault) {
+    try { localStorage.setItem(VAULT_KEY, JSON.stringify(vault)); } catch (e) { /* 隐私模式 */ }
+  }
+
+  function clearVault() {
+    try { localStorage.removeItem(VAULT_KEY); } catch (e) { /* ignore */ }
+  }
+
+  /* 旧版明文令牌：只在迁移时读一次，读完就删 */
+  function readLegacyToken() {
+    try { return localStorage.getItem(LEGACY_TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function clearLegacyToken() {
+    try { localStorage.removeItem(LEGACY_TOKEN_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function vaultWhen() {
+    var v = readVault();
+    if (!v || !v.at) return '';
+    var d = new Date(v.at);
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
   }
 
   /* ======================================================================
@@ -170,16 +282,8 @@
   }
 
   /* ======================================================================
-     连接 / 断开
+     连接 / 锁定
      ====================================================================== */
-
-  function setToken(t) {
-    state.token = t || '';
-    try {
-      if (t) localStorage.setItem(TOKEN_KEY, t);
-      else localStorage.removeItem(TOKEN_KEY);
-    } catch (e) { /* 隐私模式 */ }
-  }
 
   function renderRepoInfo() {
     var el = $('#repo-info');
@@ -198,6 +302,37 @@
     $('#token-form').hidden = false;
   }
 
+  /* 在「贴令牌」和「输密码」两种表单之间切换 */
+  function renderConnect() {
+    var vault = readVault();
+    var legacy = readLegacyToken();
+    var setup = state.setupMode || !vault;
+
+    $('#vault-setup').hidden = !setup;
+    $('#vault-unlock').hidden = setup;
+    $('#howto-token').hidden = !setup;
+
+    // 已经有保险箱时，才给「返回」按钮（否则没地方可返）
+    $('#setup-cancel-wrap').hidden = !(setup && vault);
+
+    // 旧版明文令牌：提示一下，并顺手填进输入框，省得再去找
+    var legacyHit = !!(setup && legacy);
+    $('#legacy-banner').hidden = !legacyHit;
+    if (legacyHit && !$('#f-token').value) $('#f-token').value = legacy;
+
+    var note = $('#vault-note-unlock');
+    if (note) {
+      note.textContent = vault
+        ? '令牌已加密存在这台设备上（' + vaultWhen() + ' 保存的），输密码就能解开。'
+        : '';
+    }
+
+    // 作者留空就用默认作者，占位文字跟着配置走
+    var authorEl = $('#f-author');
+    if (authorEl) authorEl.placeholder = '留空 = ' + defaultAuthor();
+  }
+
+  /* 真正去连仓库。token 只在内存里流转，不落盘 */
   function connect(token) {
     state.token = token;
     return gh('/user').then(function (me) {
@@ -209,20 +344,63 @@
       }
       return loadPosts();
     }).then(function () {
-      setToken(token);
       renderList();
       show('list');
       toast('已连接 ' + CFG.owner + '/' + CFG.repo);
     });
   }
 
-  function disconnect() {
-    setToken('');
+  /* 第一次用：贴令牌 + 设密码 */
+  function setupAndConnect(token, password) {
+    return connect(token).then(function () {
+      return sealToken(token, password);
+    }).then(function (vault) {
+      writeVault(vault);
+      clearLegacyToken();
+      state.setupMode = false;
+      $('#f-token').value = '';
+      $('#f-pass').value = '';
+      $('#f-pass2').value = '';
+    });
+  }
+
+  /* 之后每次：只输密码 */
+  function unlockAndConnect(password) {
+    var vault = readVault();
+    if (!vault) return Promise.reject(new Error('这台设备上还没有保存过令牌'));
+    return openVault(vault, password).catch(function () {
+      throw new Error('密码不对');
+    }).then(function (token) {
+      return connect(token);
+    });
+  }
+
+  function lock() {
+    state.token = '';
+    state.user = '';
     state.sha = null;
     state.posts = [];
-    $('#f-token').value = '';
+    state.setupMode = false;
+    $('#f-pass-unlock').value = '';
+    renderConnect();
     show('connect');
-    toast('已断开，令牌已从本设备清除');
+  }
+
+  /* 忘记密码 / 换令牌：清掉旧的保险箱，回到「贴令牌」表单 */
+  function resetVault() {
+    if (!confirm('清除这台设备上保存的令牌？\n\n' +
+                 '文章不会丢，都好好地存在 GitHub 上。\n' +
+                 '只是需要重新贴一次令牌，再设一个新密码。')) return;
+    clearVault();
+    clearLegacyToken();
+    state.token = '';
+    state.setupMode = true;
+    $('#f-token').value = '';
+    $('#f-pass').value = '';
+    $('#f-pass2').value = '';
+    renderConnect();
+    show('connect');
+    toast('已清除，重新贴一次令牌就好');
   }
 
   /* ======================================================================
@@ -244,11 +422,18 @@
       var tags = (p.tags || []).map(function (t) {
         return '<span class="pill">' + esc(t) + '</span>';
       }).join(' ');
+      var author = p.author
+        ? '<span class="pill pill-author">' + esc(p.author) + '</span>'
+        : '';
+      var hidden = p.hidden === true
+        ? '<span class="pill pill-hidden">已隐藏</span>'
+        : '';
       return '' +
-        '<li data-id="' + esc(p.id) + '">' +
+        '<li data-id="' + esc(p.id) + '"' + (p.hidden === true ? ' class="is-hidden"' : '') + '>' +
           '<div class="info">' +
             '<div class="ttl">' + esc(p.title) + '</div>' +
-            '<div class="meta"><span>' + fmtDate(p.date) + '</span>' + tags + '</div>' +
+            '<div class="meta"><span>' + fmtDate(p.date) + '</span>' +
+              hidden + author + tags + '</div>' +
           '</div>' +
           '<div class="ops">' +
             '<button class="btn" data-act="edit">编辑</button>' +
@@ -313,24 +498,44 @@
      编辑器
      ====================================================================== */
 
+  /* 站点默认作者，和 write.config.js 里的 defaultAuthor 保持一致 */
+  function defaultAuthor() {
+    return CFG.defaultAuthor || 'Ever Eternity';
+  }
+
   function fillForm(p) {
     $('#f-title').value = p.title || '';
     $('#f-date').value = p.date || todayISO();
     $('#f-tags').value = (p.tags || []).join(', ');
     $('#f-lede').value = p.lede || '';
     $('#f-content').value = p.content || '';
+    $('#f-author').value = p.author || '';
+    $('#f-hidden').checked = p.hidden === true;
   }
 
   function readForm() {
-    return {
+    // 固定顺序，方便看 diff
+    var out = {
       id: state.editing ? state.editing.id : '',
       title: $('#f-title').value.trim(),
       date: $('#f-date').value || todayISO(),
       tags: $('#f-tags').value.split(/[,，]/).map(function (t) { return t.trim(); })
               .filter(Boolean).slice(0, 8),
       lede: $('#f-lede').value.trim(),
-      content: $('#f-content').value
+      content: $('#f-content').value,
+      author: $('#f-author').value.trim(),
+      hidden: $('#f-hidden').checked
     };
+    // 带上将来可能新增的字段，编辑旧文章时不会把它们弄丢
+    if (state.editing) {
+      Object.keys(state.editing).forEach(function (k) {
+        if (!(k in out)) out[k] = state.editing[k];
+      });
+    }
+    // 用不到的字段就不写进 JSON，保持 posts.json 干净
+    if (!out.hidden) delete out.hidden;
+    if (!out.author) delete out.author;
+    return out;
   }
 
   /* 从标题生成一个 URL 友好的 id；taken 是已占用的 id 集合（Set） */
@@ -343,12 +548,25 @@
     return id;
   }
 
+  function shallowCopy(o) {
+    var out = {};
+    Object.keys(o || {}).forEach(function (k) { out[k] = o[k]; });
+    return out;
+  }
+
   function openEditor(post) {
     state.isNew = !post;
-    state.editing = post
-      ? { id: post.id, title: post.title, date: post.date,
-          tags: (post.tags || []).slice(), lede: post.lede || '', content: post.content || '' }
-      : { id: '', title: '', date: todayISO(), tags: [], lede: '', content: '' };
+    if (post) {
+      state.editing = shallowCopy(post);
+      state.editing.tags = (post.tags || []).slice();
+      state.editing.lede = post.lede || '';
+      state.editing.content = post.content || '';
+    } else {
+      state.editing = {
+        id: '', title: '', date: todayISO(), tags: [], lede: '', content: '',
+        author: '', hidden: false
+      };
+    }
     state.original = JSON.parse(JSON.stringify(state.editing));
 
     $('#edit-mode').textContent = state.isNew ? '新文章' : ('编辑 · ' + state.editing.id);
@@ -390,6 +608,9 @@
     if (post.title.length > 120) { toast('标题太长了', true); return; }
     if (!post.content.trim()) { toast('正文还是空的', true); $('#f-content').focus(); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(post.date)) { toast('日期格式不对', true); return; }
+    if (post.author && post.author.length > 60) {
+      toast('作者名太长了', true); $('#f-author').focus(); return;
+    }
 
     var list = state.posts.slice();
     var idx = post.id ? list.findIndex(function (p) { return p.id === post.id; }) : -1;
@@ -417,7 +638,8 @@
         renderList();
         show('list');
         var sha = data && data.commit && data.commit.sha ? data.commit.sha.slice(0, 7) : '';
-        toast('已提交' + (sha ? '（' + sha + '）' : '') + '，网站约 1 分钟后更新');
+        toast('已提交' + (sha ? '（' + sha + '）' : '') +
+              (post.hidden ? '，这篇是隐藏的' : '') + '，网站约 1 分钟后更新');
       })
       .catch(function (err) {
         // 提交失败：回滚内存状态，避免界面与远端不一致
@@ -483,23 +705,74 @@
      ====================================================================== */
 
   function bind() {
+    /* ---------- 第一次用：贴令牌 + 设密码 ---------- */
     $('#btn-connect').addEventListener('click', function () {
-      var t = $('#f-token').value.trim();
-      if (!t) { toast('先贴上令牌', true); return; }
       var btn = this;
+      var token = $('#f-token').value.trim();
+      var pass = $('#f-pass').value;
+      var pass2 = $('#f-pass2').value;
+
+      if (!cryptoReady()) {
+        toast('这个浏览器不支持加密保存（需要 https 访问）', true);
+        return;
+      }
+      if (!token) { toast('先贴上令牌', true); $('#f-token').focus(); return; }
+      if (pass.length < MIN_PASS) {
+        toast('密码至少 ' + MIN_PASS + ' 位', true); $('#f-pass').focus(); return;
+      }
+      if (pass !== pass2) { toast('两次输入的密码不一样', true); $('#f-pass2').focus(); return; }
+
       btn.disabled = true;
       btn.textContent = '连接中…';
-      connect(t).catch(function (err) {
-        setToken('');
+      setupAndConnect(token, pass).catch(function (err) {
+        state.token = '';
         toast(err.message, true);
       }).then(function () {
         btn.disabled = false;
-        btn.textContent = '连接';
+        btn.textContent = '保存并连接';
       });
     });
 
-    $('#f-token').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); $('#btn-connect').click(); }
+    ['#f-token', '#f-pass', '#f-pass2'].forEach(function (sel) {
+      $(sel).addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); $('#btn-connect').click(); }
+      });
+    });
+
+    /* ---------- 之后每次：只输密码 ---------- */
+    $('#btn-unlock').addEventListener('click', function () {
+      var btn = this;
+      var pass = $('#f-pass-unlock').value;
+      if (!pass) { toast('先输密码', true); $('#f-pass-unlock').focus(); return; }
+
+      btn.disabled = true;
+      btn.textContent = '打开中…';
+      unlockAndConnect(pass).catch(function (err) {
+        state.token = '';
+        if (err.message === '密码不对') {
+          toast('密码不对，再试一次', true);
+          $('#f-pass-unlock').select();
+        } else {
+          toast(err.message, true);
+        }
+      }).then(function () {
+        btn.disabled = false;
+        btn.textContent = '打开写作台';
+      });
+    });
+
+    $('#f-pass-unlock').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); $('#btn-unlock').click(); }
+    });
+
+    $('#btn-vault-reset').addEventListener('click', resetVault);
+
+    $('#btn-setup-cancel').addEventListener('click', function () {
+      state.setupMode = false;
+      $('#f-token').value = '';
+      $('#f-pass').value = '';
+      $('#f-pass2').value = '';
+      renderConnect();
     });
 
     $('#btn-new').addEventListener('click', function () { openEditor(null); });
@@ -510,8 +783,10 @@
     $('#btn-export').addEventListener('click', doExport);
 
     $('#btn-disconnect').addEventListener('click', function () {
-      if (!confirm('断开连接？令牌会从这台设备上清除，下次要重新贴一次。')) return;
-      disconnect();
+      if (!confirm('锁定写作台？\n\n令牌会从内存里清掉，下次输密码就能再打开。\n' +
+                   '（文章不受影响）')) return;
+      lock();
+      toast('已锁定');
     });
 
     $('#list').addEventListener('click', function (e) {
@@ -539,15 +814,16 @@
       toast('草稿已丢弃');
     });
 
-    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-content'].forEach(function (sel) {
-      var el = $(sel);
-      var onEdit = function () {
-        state.editing = readForm();
-        scheduleDraft();
-      };
-      el.addEventListener('input', onEdit);
-      el.addEventListener('change', onEdit);
-    });
+    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-content', '#f-author', '#f-hidden']
+      .forEach(function (sel) {
+        var el = $(sel);
+        var onEdit = function () {
+          state.editing = readForm();
+          scheduleDraft();
+        };
+        el.addEventListener('input', onEdit);
+        el.addEventListener('change', onEdit);
+      });
 
     window.addEventListener('beforeunload', function (e) {
       if (!$('#view-edit').hidden && isDirty()) {
@@ -582,16 +858,18 @@
 
     if (!CFG.owner || !CFG.repo) { show('connect'); return; }
 
-    var saved = '';
-    try { saved = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { /* ignore */ }
+    if (!cryptoReady()) {
+      var warn = document.createElement('div');
+      warn.className = 'banner banner-warn';
+      warn.innerHTML = '<span class="grow">这个浏览器不支持加密保存令牌。' +
+        '请用 https 打开写作台（比如 https://' +
+        esc((CFG.owner || '').toLowerCase() + '.github.io/write.html') + '）。</span>';
+      var form = $('#token-form');
+      form.parentNode.insertBefore(warn, form);
+    }
 
-    if (!saved) { show('connect'); return; }
-
-    // 有存过的令牌：静默重连
-    connect(saved).catch(function (err) {
-      setToken('');
-      show('connect');
-      toast('自动登录失败：' + err.message, true);
-    });
+    // 有保险箱就只问密码，没有就问令牌 —— 两种都不自动登录
+    renderConnect();
+    show('connect');
   });
 })();

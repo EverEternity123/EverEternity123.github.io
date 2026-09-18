@@ -20,5 +20,8 @@ window.BLOG_CONFIG = {
   path: 'data/posts.json',
 
   // 站点地址，仅用于界面上显示提示，可留空
-  siteUrl: 'https://evereternity123.github.io'
+  siteUrl: 'https://evereternity123.github.io',
+
+  // 新文章默认作者。写作台里「作者」一栏留空时用它
+  defaultAuthor: 'Ever Eternity'
 };

@@ -6,7 +6,18 @@
 <meta name="robots" content="noindex, nofollow">
 <title>写作台 · Ever Eternity</title>
 <meta name="theme-color" content="#faf7f2">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23b45309'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Georgia,serif' font-weight='700' fill='%23fff' text-anchor='middle'%3EE%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ever Eternity">
+<meta property="og:title" content="写作台 · Ever Eternity">
+<meta property="og:description" content="Ever Eternity 的写作台。">
+<meta property="og:image" content="https://evereternity123.github.io/assets/img/og-image.jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://evereternity123.github.io/write.html">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css">
 <link rel="stylesheet" href="assets/css/admin.css">
 <script>
@@ -24,7 +35,7 @@
 <header class="site-header">
   <div class="wrap header-inner">
     <a class="brand" href="index.html">
-      <span class="brand-mark">E</span>
+      <span class="brand-mark"><img src="assets/img/brand-64.png" alt="" width="26" height="26"></span>
       <span class="brand-text">Ever Eternity</span>
     </a>
     <nav class="nav">
@@ -55,14 +66,60 @@
       </div>
 
       <div id="token-form">
-        <label class="field">
-          <span>GitHub 访问令牌（Personal Access Token）</span>
-          <input type="password" id="f-token" autocomplete="off"
-                 placeholder="github_pat_… 或 ghp_…" spellcheck="false">
-        </label>
-        <button class="btn btn-primary btn-block" id="btn-connect">连接</button>
 
-        <details class="howto">
+        <!-- ① 第一次用（或点了「换令牌」）：贴一次令牌 + 自己设一个密码 -->
+        <div id="vault-setup" hidden>
+          <div class="banner banner-warn" id="legacy-banner" hidden>
+            <span class="grow">这台设备上还存着旧版的明文令牌，设个密码把它加密保存吧。</span>
+          </div>
+
+          <label class="field">
+            <span>GitHub 访问令牌（Personal Access Token）</span>
+            <input type="password" id="f-token" autocomplete="off"
+                   placeholder="github_pat_… 或 ghp_…" spellcheck="false">
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>设一个密码</span>
+              <input type="password" id="f-pass" autocomplete="new-password"
+                     placeholder="至少 6 位">
+            </label>
+            <label class="field">
+              <span>再输一次</span>
+              <input type="password" id="f-pass2" autocomplete="new-password"
+                     placeholder="确认密码">
+            </label>
+          </div>
+
+          <button class="btn btn-primary btn-block" id="btn-connect">保存并连接</button>
+          <p class="vault-note">
+            令牌会用你设的密码加密（PBKDF2 + AES-GCM），只存在这台设备的浏览器里，
+            不会上传到任何地方。以后打开写作台只输密码就行。
+          </p>
+
+          <div class="vault-links" id="setup-cancel-wrap" hidden>
+            <button class="btn btn-ghost" id="btn-setup-cancel">← 返回，继续用原来的密码</button>
+          </div>
+        </div>
+
+        <!-- ② 之后每次打开：只输密码 -->
+        <div id="vault-unlock" hidden>
+          <label class="field">
+            <span>写作台密码</span>
+            <input type="password" id="f-pass-unlock" autocomplete="current-password"
+                   placeholder="打开这台设备的密码">
+          </label>
+          <button class="btn btn-primary btn-block" id="btn-unlock">打开写作台</button>
+          <p class="vault-note" id="vault-note-unlock">
+            令牌已经加密存在这台设备上，输密码就能解开。
+          </p>
+          <div class="vault-links">
+            <button class="btn btn-ghost" id="btn-vault-reset">忘记密码 / 换一个令牌</button>
+          </div>
+        </div>
+
+        <details class="howto" id="howto-token" hidden>
           <summary>怎么拿到这个令牌？</summary>
           <ol>
             <li>手机上打开
@@ -78,8 +135,8 @@
             <li>点最下面 <b>Generate token</b>，复制生成的 <code>github_pat_…</code> 贴到上面</li>
           </ol>
           <p class="howto-note">
-            令牌只保存在你这台设备的浏览器里，不会上传到任何地方。
-            但它等同于这个仓库的写权限，别分享给别人；换手机需要重新贴一次。
+            这个密码只保护「存在这台设备上的令牌」，它不等于网站登录，也拦不住别人拿到你的令牌。
+            令牌等同于仓库的写权限，别分享给别人；换设备需要重新贴一次。
           </p>
         </details>
       </div>
@@ -104,7 +161,7 @@
     <div class="admin-actions">
       <button class="btn" id="btn-refresh">刷新</button>
       <button class="btn" id="btn-export">导出备份</button>
-      <button class="btn btn-ghost" id="btn-disconnect">断开连接</button>
+      <button class="btn btn-ghost" id="btn-disconnect">锁定</button>
     </div>
   </section>
 
@@ -134,14 +191,33 @@
         <input type="date" id="f-date">
       </label>
       <label class="field">
-        <span>标签（逗号分隔）</span>
-        <input type="text" id="f-tags" placeholder="生活, 随笔">
+        <span>作者</span>
+        <input type="text" id="f-author" placeholder="留空 = Ever Eternity" maxlength="60"
+               autocomplete="off" spellcheck="false">
       </label>
     </div>
 
     <label class="field">
+      <span>标签（逗号分隔）</span>
+      <input type="text" id="f-tags" placeholder="生活, 随笔">
+    </label>
+
+    <label class="field">
       <span>导语（可留空）</span>
       <input type="text" id="f-lede" placeholder="一句话摘要，显示在标题下面" maxlength="300">
+    </label>
+
+    <label class="check">
+      <input type="checkbox" id="f-hidden">
+      <span class="check-box" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </span>
+      <span class="check-text">
+        <b>隐藏这篇文章</b>
+        <em>首页、归档、标签里都不会出现，别人翻不到；用链接
+          <code>post.html?p=…</code> 打开仍然能看到。适合先存着、以后想公开再取消勾选。</em>
+      </span>
     </label>
 
     <label class="field">
