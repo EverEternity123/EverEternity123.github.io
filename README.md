@@ -32,9 +32,12 @@
     ├── preview.js        本地预览服务器
     ├── check-content.js  内容与资源自检
     ├── screenshot.py     端到端自检 + 截图
-    ├── migrate-via-api.py ★ 搬迁到 GitHub（走 API，不需要 git）
+    ├── migrate-via-api.py ★ 发布到 GitHub（走 API，不需要 git）
     ├── migrate.cmd       ★ 上面那个脚本的双击启动器
+    ├── sync-from-remote.py ★ 把线上文章拉回本地（手机上写的同步过来）
     ├── test-migrate.py   搬迁脚本的自动化测试（假 GitHub API）
+    ├── verify-live.py    用真实令牌验证线上写作台（只读）
+    ├── verify-write-api.py  验证保存链路并自动清理
     └── publish-to-github.sh  给装了 Git Bash 的人用的备选方案
 ```
 
@@ -165,13 +168,39 @@ python .tools\migrate-via-api.py --apply    :: 真正执行
 ### 脚本到底做了什么
 
 1. 读远端 `main` 当前的 HEAD
-2. 把旧博客整条历史备份到 `legacy-hexo-2022` 分支
-3. 用本地 17 个文件建一棵**全新的**文件树 —— 注意不基于旧树，
+2. **检查 `data/posts.json` 有没有冲突**（见下面「重要：别把手机写的文章冲掉」）
+3. 把旧博客整条历史备份到 `legacy-hexo-2022` 分支
+4. 用本地 17 个文件建一棵**全新的**文件树 —— 注意不基于旧树，
    所以旧的 Hexo 文件（`css/`、`js/`、`2022/` 等）会从站点根目录**整体消失**
-4. 建一个以旧 HEAD 为父提交的新提交（历史不断）
-5. 把 `main` 指向新提交（force）
+5. 建一个以旧 HEAD 为父提交的新提交（历史不断）
+6. 把 `main` 指向新提交（force）
 
 跑完会打印远端与本地文件的对照，不一致会直接列出来。
+
+### 重要：别把手机写的文章冲掉
+
+`data/posts.json` 是唯一会被**两边同时改**的文件：你在手机上写完就提交了，
+而本地这份还是旧的。如果直接推送，手机上刚写的文章会被抹掉。
+
+所以脚本默认会先比对远端的 `data/posts.json`：
+
+- **两边一样** → 直接继续，你什么都不用管。
+- **两边不一样** → **停下**（退出码 2），列出「只在远端有的文章」，
+  要求你显式选一个：
+
+```bat
+python .tools\migrate-via-api.py --apply --take-remote    :: 采用远端的（推荐，手机写的不丢）
+python .tools\migrate-via-api.py --apply --keep-local     :: 坚持用本地覆盖远端
+```
+
+推荐的做法是**先把线上内容拉回本地**，改完再推：
+
+```bat
+python .tools\sync-from-remote.py            :: 先看看差在哪（不改任何东西）
+python .tools\sync-from-remote.py --apply    :: 真的拉回来（本地旧版会先备份）
+```
+
+它只拉 `data/posts.json`，不会动你本地改的 HTML / CSS。
 
 ### 想恢复旧博客
 
@@ -187,9 +216,29 @@ python .tools\migrate-via-api.py --apply    :: 真正执行
 python .tools\test-migrate.py
 ```
 
-21 项断言，包括：备份分支是否指向旧 HEAD、新提交的父提交对不对、
-旧文件是否被清干净、17 个文件内容是否与本地完全一致（含中文和空的
-`.nojekyll`）、令牌是否被回显。**不会碰你的真实仓库。**
+35 项断言，包括：空令牌被拒绝、远端比本地新时会停下、`--take-remote`
+采用远端、`--keep-local` 明确覆盖、备份分支是否指向旧 HEAD、新提交的父提交
+对不对、旧文件是否被清干净、17 个文件内容是否与本地完全一致（含中文和空的
+`.nojekyll`）、令牌是否被回显。**它把脚本指到临时目录里的站点副本上跑，
+所以既不碰真实仓库，也不碰你真实的 `data/posts.json`。**
+
+### 验证线上写作台
+
+用真实令牌跑一遍「连接 → 列文章 → 打开编辑器 → Markdown 预览 → 刷新免登录」，
+全程只读，并在前后各查一次远端 HEAD 证明没有产生提交：
+
+```bat
+<playwright 环境的 python> -u .tools\verify-live.py
+```
+
+验证「保存」链路（真的写一次再清理干净）：
+
+```bat
+python .tools\verify-write-api.py
+```
+
+它会写入一个临时文件、读回来核对中文与 emoji、删掉，最后把 `main`
+强制重置回原提交 —— 分支历史上不留痕迹。
 
 ### 如果你以后装了 Git
 
@@ -269,9 +318,10 @@ E2E_PART=pages python .tools/screenshot.py    # 只跑页面检查 + 截图
 - **GitHub Pages 免费版要求仓库是公开的**（现在是公开的，别改成私有）。
 - **软性限额**：仓库建议 1GB 以内、每月流量 100GB、每小时最多 10 次构建。
   个人博客完全够用，但别短时间内反复提交十几次。
-- **`data/posts.json` 是唯一的内容源**。写作台和本地都改它，
-  两处同时改容易撞车 —— 撞车时写作台会提示「文件在别处被改过了」，
-  点「刷新」重新读取再保存即可。
+- **`data/posts.json` 是唯一的内容源**，写作台和本地都改它，两处同时改容易撞车：
+  - **在写作台里撞车**：会提示「文件在别处被改过了」，点「刷新」重新读取再保存即可。
+  - **在本地推送时撞车**：搬迁脚本会停下并要求你选 `--take-remote` 或
+    `--keep-local`（见第五节）。想省事就先跑 `sync-from-remote.py` 把线上内容拉回来。
 - **`write.html` 是公开可访问的**，但没有令牌谁也进不去。
   如果你介意，可以在 GitHub 上把它改名成别人猜不到的名字。
 - 备份：写作台列表底部有「导出备份」，会下载一份 `posts-日期.json`。
