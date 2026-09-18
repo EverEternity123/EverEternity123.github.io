@@ -66,60 +66,14 @@
       </div>
 
       <div id="token-form">
+        <label class="field">
+          <span>GitHub 访问令牌（Personal Access Token）</span>
+          <input type="password" id="f-token" autocomplete="off"
+                 placeholder="github_pat_… 或 ghp_…" spellcheck="false">
+        </label>
+        <button class="btn btn-primary btn-block" id="btn-connect">连接</button>
 
-        <!-- ① 第一次用（或点了「换令牌」）：贴一次令牌 + 自己设一个密码 -->
-        <div id="vault-setup" hidden>
-          <div class="banner banner-warn" id="legacy-banner" hidden>
-            <span class="grow">这台设备上还存着旧版的明文令牌，设个密码把它加密保存吧。</span>
-          </div>
-
-          <label class="field">
-            <span>GitHub 访问令牌（Personal Access Token）</span>
-            <input type="password" id="f-token" autocomplete="off"
-                   placeholder="github_pat_… 或 ghp_…" spellcheck="false">
-          </label>
-
-          <div class="field-row">
-            <label class="field">
-              <span>设一个密码</span>
-              <input type="password" id="f-pass" autocomplete="new-password"
-                     placeholder="至少 6 位">
-            </label>
-            <label class="field">
-              <span>再输一次</span>
-              <input type="password" id="f-pass2" autocomplete="new-password"
-                     placeholder="确认密码">
-            </label>
-          </div>
-
-          <button class="btn btn-primary btn-block" id="btn-connect">保存并连接</button>
-          <p class="vault-note">
-            令牌会用你设的密码加密（PBKDF2 + AES-GCM），只存在这台设备的浏览器里，
-            不会上传到任何地方。以后打开写作台只输密码就行。
-          </p>
-
-          <div class="vault-links" id="setup-cancel-wrap" hidden>
-            <button class="btn btn-ghost" id="btn-setup-cancel">← 返回，继续用原来的密码</button>
-          </div>
-        </div>
-
-        <!-- ② 之后每次打开：只输密码 -->
-        <div id="vault-unlock" hidden>
-          <label class="field">
-            <span>写作台密码</span>
-            <input type="password" id="f-pass-unlock" autocomplete="current-password"
-                   placeholder="打开这台设备的密码">
-          </label>
-          <button class="btn btn-primary btn-block" id="btn-unlock">打开写作台</button>
-          <p class="vault-note" id="vault-note-unlock">
-            令牌已经加密存在这台设备上，输密码就能解开。
-          </p>
-          <div class="vault-links">
-            <button class="btn btn-ghost" id="btn-vault-reset">忘记密码 / 换一个令牌</button>
-          </div>
-        </div>
-
-        <details class="howto" id="howto-token" hidden>
+        <details class="howto">
           <summary>怎么拿到这个令牌？</summary>
           <ol>
             <li>手机上打开
@@ -135,8 +89,8 @@
             <li>点最下面 <b>Generate token</b>，复制生成的 <code>github_pat_…</code> 贴到上面</li>
           </ol>
           <p class="howto-note">
-            这个密码只保护「存在这台设备上的令牌」，它不等于网站登录，也拦不住别人拿到你的令牌。
-            令牌等同于仓库的写权限，别分享给别人；换设备需要重新贴一次。
+            令牌只保存在你这台设备的浏览器里，不会上传到任何地方。
+            但它等同于这个仓库的写权限，别分享给别人；换手机需要重新贴一次。
           </p>
         </details>
       </div>
@@ -161,7 +115,7 @@
     <div class="admin-actions">
       <button class="btn" id="btn-refresh">刷新</button>
       <button class="btn" id="btn-export">导出备份</button>
-      <button class="btn btn-ghost" id="btn-disconnect">锁定</button>
+      <button class="btn btn-ghost" id="btn-disconnect">断开连接</button>
     </div>
   </section>
 

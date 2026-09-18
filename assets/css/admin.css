@@ -441,24 +441,6 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   color: var(--accent);
 }
 
-/* ---------- 保险箱（密码）---------- */
-.vault-note {
-  margin: 14px 0 0;
-  font-size: 12.5px;
-  line-height: 1.75;
-  color: var(--text-3);
-}
-
-.vault-links {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-  text-align: center;
-}
-.vault-links .btn { font-size: 13.5px; }
-
-#legacy-banner { margin-bottom: 16px; }
-
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
   .field-row { flex-direction: column; gap: 0; }

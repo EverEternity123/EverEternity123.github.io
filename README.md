@@ -26,18 +26,31 @@
 │   ├── js/app.js         首页/详情/归档的渲染逻辑
 │   ├── js/markdown.js    自写的迷你 Markdown 渲染器
 │   ├── js/theme.js       明暗切换
-│   └── js/admin.js       写作台逻辑（读写 GitHub 仓库）
+│   ├── js/admin.js       写作台逻辑（读写 GitHub 仓库）
+│   └── img/              头像、网页缩略图、favicon
+│       ├── avatar.jpeg        首页头像（512×512）
+│       ├── og-image.jpeg      分享到微信/微博时的缩略图（1200×630）
+│       ├── apple-touch-icon.png  加到手机桌面时的图标
+│       ├── brand-64.png       页头左上角的小图标
+│       └── favicon-32.png / favicon-16.png
 ├── data/posts.json       ★ 所有文章都在这个文件里
 └── .tools/               本地开发工具（已在 .gitignore，不会发布）
     ├── preview.js        本地预览服务器
-    ├── check-content.js  内容与资源自检
-    ├── screenshot.py     端到端自检 + 截图
+    ├── make-images.py    ★ 从 .tools/source/ 的原图生成上面那几张图
+    ├── check-content.js  内容/资源/配置自检 + 写作台错误提示文案（不用浏览器）
+    ├── screenshot.py     端到端自检 + 截图（8 段，见第七节）
+    ├── verify-hidden.py  隐藏文章 + 作者一栏在页面上的表现（注入数据，最稳）
+    ├── verify-write-fields.py  写作台里作者/隐藏的读写
+    ├── verify-looks.py   头像/图标/og 缩略图有没有真的加载出来
+    ├── verify-local-file.py  本地双击打开 write.html 能不能用（file://）
     ├── migrate-via-api.py ★ 发布到 GitHub（走 API，不需要 git）
     ├── migrate.cmd       ★ 上面那个脚本的双击启动器
     ├── sync-from-remote.py ★ 把线上文章拉回本地（手机上写的同步过来）
     ├── test-migrate.py   搬迁脚本的自动化测试（假 GitHub API）
     ├── verify-live.py    用真实令牌验证线上写作台（只读）
     ├── verify-write-api.py  验证保存链路并自动清理
+    ├── _probe-409.py     一次性探针：拦截下的 4xx 会不会把 Chromium 弄崩
+    ├── source/           图片原图（刘看山.jpeg，不发布，留着重新生成）
     └── publish-to-github.sh  给装了 Git Bash 的人用的备选方案
 ```
 
@@ -58,13 +71,17 @@ node .tools/preview.js
 
 ## 二、日常写文章（手机 / 电脑都能用）
 
-写作台不需要后端：它用你贴进去的 **GitHub 令牌**直接读写仓库里的
-`data/posts.json`。保存 = 向仓库提交一次 commit，GitHub Pages 随后自动重新发布
-（通常 1 分钟内）。
+写作台不需要后端：它用 **GitHub 令牌**直接读写仓库里的 `data/posts.json`。
+保存 = 向仓库提交一次 commit，GitHub Pages 随后自动重新发布（通常 1 分钟内）。
+
+第一次贴一次令牌，之后就记在这台设备的浏览器里，再打开直接进文章列表。
+
+> 令牌等同于这个仓库的写权限 —— 别分享给别人，也别贴到聊天群里。
+> 换手机、换浏览器、清了浏览器数据之后，需要重新贴一次。
 
 ### 第一次：生成令牌
 
-1. 手机上登录 GitHub，打开
+1. 登录 GitHub，打开
    <https://github.com/settings/personal-access-tokens/new>
 2. **Token name** 随便填，比如 `everternity-blog`
 3. **Expiration** 选个期限（比如 1 年，到期后重新生成一次）
@@ -73,19 +90,44 @@ node .tools/preview.js
 5. 展开 **Repository permissions** → 找到 **Contents** → 改成 **Read and write**
 6. 点最下面 **Generate token**，复制生成的 `github_pat_…`
 
-> 令牌只保存在你这台设备的浏览器里，不会上传到任何地方。
-> 但它等同于这个仓库的写权限 —— 别分享给别人，换设备要重新贴一次。
+打开 <https://evereternity123.github.io/write.html>，把令牌贴进去，点「连接」。
+
+想换一个令牌、或者让这台设备忘掉它，点列表页右上角的「断开连接」即可，
+再贴一个新的就行。文章都在 GitHub 上，一篇都不会丢。
 
 ### 之后：发文
 
 1. 打开 <https://evereternity123.github.io/write.html>
-2. 贴上令牌，点「连接」（同一台设备只需一次，之后会自动登录）
-3. 点「＋ 写新的」，填标题、日期、标签、正文
+2. 贴过令牌就直接进列表（没贴过才需要再贴一次）
+3. 点「＋ 写新的」，填标题、日期、作者、标签、正文
 4. 「预览」看渲染效果 → 「保存并发布」
 5. 等 1 分钟左右，网站上就有了
 
+### 也可以直接双击打开
+
+写作台是纯前端页面，**双击本地文件也能用**：在文件管理器里打开
+`write.html`，功能和线上完全一样。适合电脑上不方便起服务的时候。
+
+（GitHub 的接口允许跨域访问，所以 `file://` 下读写仓库都正常。
+万一某个浏览器拦了，用 `node .tools/preview.js` 起个本地服务即可。）
+
 正文支持 Markdown：`**粗体**`、`*斜体*`、`## 标题`、`> 引用`、`- 列表`、
 `` `行内代码` ``、` ```代码块``` `。空行分段。
+
+### 作者一栏
+
+留空就用站点默认作者（`write.config.js` 里的 `defaultAuthor`，现在是
+`Ever Eternity`）。填了别的名字（比如摘录别人的文章），
+文章详情页会显示这个作者；如果跟默认作者不一样，首页卡片上也会标出来。
+
+### 隐藏这篇文章
+
+编辑器里勾上「隐藏这篇文章」，保存后：
+
+- 首页列表、归档、标签栏、标签云里都**看不到**它
+- 但它仍然存在，用链接 `post.html?p=文章id` 直接打开就能看（方便自己先预览）
+- 打开时顶部会有一行「这篇还没公开」的提醒
+- 想公开的时候，取消勾选再保存就行
 
 写了一半被打断也没关系：编辑内容每 0.7 秒自动存一份草稿在本地，
 下次打开这篇文章会提示你恢复。
@@ -293,36 +335,71 @@ node .tools\check-content.js        :: 文章数据、资源、链接 —— 秒
 搬迁脚本的逻辑验证（用内存里的假 GitHub 仓库，不碰真实数据）：
 
 ```bat
-python .tools\test-migrate.py       :: 21 项断言
+python .tools\test-migrate.py       :: 39 项断言
 ```
 
-需要跑浏览器、验证完整发文流程：
+需要跑浏览器、验证完整发文流程（先起预览服务：`node .tools/preview.js`）：
 
 ```bash
-node .tools/preview.js &            # 先起预览服务（另开一个终端）
-python .tools/screenshot.py         # 写作台全流程 + 页面检查 + 截图
+node .tools/check-content.js            # 内容/资源/配置/错误提示文案（21 项，不用浏览器）
+python .tools/test-migrate.py           # 搬迁脚本（39 项，不碰真实仓库）
+python .tools/verify-hidden.py          # 隐藏文章 + 作者一栏在页面上的表现（21 项）
+python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（23 项）
+python .tools/verify-looks.py           # 头像/图标/og 缩略图有没有真的加载出来（7 项）
+python .tools/verify-local-file.py      # 本地双击打开 write.html 能不能用（两段）
+python .tools/screenshot.py             # 写作台全流程 + 页面检查 + 截图
 ```
 
-`screenshot.py` 会用浏览器把 GitHub API 拦截成一个**内存里的假仓库**，
-所以它验证「写作台保存 → 提交 → 站点内容跟着变」这条链路时
+浏览器脚本都会把 GitHub API 拦截成一个**内存里的假仓库**，
+所以验证「写作台保存 → 提交 → 站点内容跟着变」这条链路时
 **不会动到你的真实仓库**，跑完 `_preview/` 里有各个页面的截图。
+
+### 为什么把 E2E 切得这么碎
+
+`--single-process` 的 Chromium 在一次会话里能承受的「页面加载 + 拦截请求」
+次数很少（实测 3~4 次就到头），一崩就把后面所有结论一起带走。所以
+`.tools/screenshot.py` 拆成了互不影响的几段，每段自己连一次、自己造数据：
+
+```bash
+E2E_PART=connect    python .tools/screenshot.py  # 令牌连接：贴/校验/记住/断开（16 项）
+E2E_PART=features   python .tools/screenshot.py  # 作者一栏（9 项）
+E2E_PART=hidden     python .tools/screenshot.py  # 隐藏文章（17 项）
+E2E_PART=unhide     python .tools/screenshot.py  # 取消隐藏（12 项）
+E2E_PART=write      python .tools/screenshot.py  # 新建并发布（34 项）
+E2E_PART=write-edit python .tools/screenshot.py  # 编辑 / 删除 / 空仓库首用（24 项）
+E2E_PART=conflict   python .tools/screenshot.py  # 撞车保护（见下面的说明）
+E2E_PART=pages      python .tools/screenshot.py  # 页面检查 + 截图（8 项）
+```
+
+同理，`.tools/verify-live.py` 和 `.tools/verify-local-file.py` 也各分两段跑。
 
 ### 如果看到「浏览器断开」
 
 这是本机 `--single-process` Chromium 的已知毛病：跑久一点会整进程崩掉
-（实测约 1/4 概率，跟代码无关，已经用 A/B 对照排除过平滑滚动、截图新表面
-等嫌疑）。脚本已经做了容错，崩了只会让**那一段之后**的检查判失败，
-不会丢掉已经跑出来的结论。
+（实测约 1/4 概率，跟代码无关）。脚本已经做了容错，崩了只会让**那一段之后**
+的检查判失败，不会丢掉已经跑出来的结论。
 
-想更稳一点，分两次跑，两段互不影响：
+### 撞车保护那一段为什么是「环境受限」
+
+`E2E_PART=conflict` 里只要让带请求体的 PUT 收到 4xx，Chromium 就必崩。
+已经做过对照实验：
+
+- 单独发一个会返回 409 的 fetch —— 没事（`.tools/_probe-409.py`）
+- 把 409 去掉、让保存成功 —— 没事
+- 把 409 换成 403 —— 一样崩
+
+所以是「写作台的错误分支 + 拦截下的 4xx」这个组合在这个沙箱里跑不动，
+不是页面逻辑的问题。脚本遇到这种情况会**如实打印说明并跳过**，不记成失败；
+而 409 那条路上真正重要的东西 —— 用户看到的提示文案 —— 由
+`check-content.js` 把 `ghError` 抠出来直接跑（7 项，含 401/403/404/409/422）。
+
+线上实测（用真实令牌，只读，不会提交任何东西）：
 
 ```bash
-E2E_PART=write python .tools/screenshot.py    # 只跑写作台全流程
-E2E_PART=pages python .tools/screenshot.py    # 只跑页面检查 + 截图
+python .tools/verify-live.py                   # 两段都跑
+VL_PART=main     python .tools/verify-live.py  # 已记住令牌 → 自动登录 / 列表 / 编辑器
+VL_PART=remember python .tools/verify-live.py  # 全新设备：贴令牌 → 记住 → 重开自动登录
 ```
-
-「撞车保护」（保存时发现文件在别处被改过）那一段是崩得最凶的，
-所以特意排在最后跑，万一崩了也不会带走别的结论。
 
 ---
 
