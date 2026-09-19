@@ -163,6 +163,14 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 .admin-bar .spacer { flex: 1; }
 .admin-bar .group { display: flex; gap: 8px; align-items: center; }
 
+/* 顶栏下面那行说明（「首页介绍不在文章里」） */
+.admin-hint {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
 /* ---------- 文章列表 ---------- */
 /* 标签筛选栏：复用首页 .tag-btn 的外观，只把下边距收窄一点（列表里不需要那么多空） */
 .admin-tagbar {
@@ -475,4 +483,13 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   .field-row { flex-direction: column; gap: 0; }
   .admin-list li { padding: 13px 2px; }
   .admin-list .ttl { font-size: 15.5px; }
+
+  /* 文章列表页：窄屏上让标题和按钮各占一行，
+     保证「站点信息」和「写新的」不会被挤到看不见的地方 */
+  #view-list .admin-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  #view-list .admin-bar .group { justify-content: space-between; }
 }

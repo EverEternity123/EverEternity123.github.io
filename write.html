@@ -103,9 +103,16 @@
       <h1>我的文章</h1>
       <div class="group">
         <span class="pill" id="count-pill">—</span>
+        <button class="btn" id="btn-site">站点信息</button>
         <button class="btn btn-primary" id="btn-new">＋ 写新的</button>
       </div>
     </div>
+
+    <!-- 别让人以为写作台只能发文章。「站点信息」原本在列表最下面，
+         文章一多就得滚很久才看得见，所以挪到顶栏，再补这一句说明。 -->
+    <p class="admin-hint">
+      首页的介绍、关于页、页脚落款不在文章里 —— 点上面的「站点信息」改。
+    </p>
 
     <div class="repo-strip" id="repo-strip"></div>
 
@@ -116,7 +123,6 @@
     <div class="empty-note" id="list-empty" hidden>还没有文章，点右上角开始写第一篇。</div>
 
     <div class="admin-actions">
-      <button class="btn" id="btn-site">站点信息</button>
       <button class="btn" id="btn-refresh">刷新</button>
       <button class="btn" id="btn-export">导出备份</button>
       <button class="btn btn-ghost" id="btn-disconnect">断开连接</button>
