@@ -57,8 +57,9 @@
     ├── verify-desktop.py 写作台在电脑宽屏下能不能用（VD_SIZE=1440x900 / 1920x1080）
     ├── migrate-via-api.py ★ 发布到 GitHub（走 API，不需要 git）
     ├── migrate.cmd       ★ 上面那个脚本的双击启动器
-    ├── sync-from-remote.py ★ 把线上文章拉回本地（手机上写的同步过来）
-    ├── test-migrate.py   搬迁脚本的自动化测试（57 项，配 _mock_gh.py）
+    ├── sync-from-remote.py ★ 把线上内容拉回本地（文章 + 站点信息，手机改的同步过来）
+    ├── test-migrate.py   搬迁脚本的自动化测试（66 项，配 _mock_gh.py）
+    ├── test-sync.py      同步脚本的纯函数测试（25 项，不联网）
     ├── _mock_gh.py       内存里的假 GitHub API（只给 test-migrate.py 用）
     ├── verify-live.py    用真实令牌验证线上写作台（只读，崩了自动重跑）
     ├── verify-write-api.py  验证保存链路并自动清理
@@ -292,7 +293,12 @@ python .tools\sync-from-remote.py            :: 先看看差在哪（不改任�
 python .tools\sync-from-remote.py --apply    :: 真的拉回来（本地旧版会先备份）
 ```
 
-它只拉 `data/posts.json`，不会动你本地改的 HTML / CSS。
+它拉的是**写作台能改的那两个文件** —— `data/posts.json`（文章）和
+`data/site.json`（首页介绍 / 关于页 / 页脚），不会动你本地改的 HTML / CSS / JS。
+
+> 为什么两个都要拉：曾经只拉 `posts.json`，结果有一天你在写作台连着改了 4 次
+> 站点信息，这个脚本却照样打印「本地与远端逐字节一致」—— **一份过期的本地副本，
+> 配上一句「一致」，正是发布时误覆盖的起点。** 现在它会把每个文件分别报出来。
 
 > **别低估这件事发生的频率。** 上线当天就真实发生过一次：你在写作台里连着改了
 > 11 篇（给文摘类文章补上「作者」），而本地那份还是旧的 —— 两边同时动过
@@ -313,11 +319,23 @@ python .tools\sync-from-remote.py --apply    :: 真的拉回来（本地旧版�
 python .tools\test-migrate.py
 ```
 
-57 项断言，包括：空令牌被拒绝、远端比本地新时会停下、`--take-remote`
+66 项断言，包括：空令牌被拒绝、远端比本地新时会停下、`--take-remote`
 采用远端、`--keep-local` 明确覆盖、备份分支是否指向旧 HEAD、新提交的父提交
 对不对、旧文件是否被清干净、17 个文件内容是否与本地完全一致（含中文和空的
 `.nojekyll`）、令牌是否被回显。**它把脚本指到临时目录里的站点副本上跑，
 所以既不碰真实仓库，也不碰你真实的 `data/posts.json`。**
+
+`sync-from-remote.py` 另有一个不联网的纯函数测试：
+
+```bat
+python .tools\test-sync.py
+```
+
+25 项断言，盯住三件事：同步范围必须同时覆盖 `posts.json` 和 `site.json`；
+「本地多出一篇」这种差异报告**不能崩**（写这段时又踩了一次
+`TypeError: unhashable type: 'dict'` —— 把 post 字典当 id 用了，跟当年
+`migrate-via-api` 那个坑一模一样，所以这次专门写测试钉住）；
+以及换行符识别、JSON 读不出来时不能吞成空列表。
 
 ### 验证线上写作台
 
@@ -383,20 +401,22 @@ bash .tools/publish-to-github.sh
 ## 六、自检（改完东西想确认没坏）
 
 ```bat
-node .tools\check-content.js        :: 文章数据、资源、链接、站点信息、错误文案 —— 秒级，32 项
+node .tools\check-content.js        :: 文章数据、资源、链接、站点信息、错误文案 —— 秒级，42 项
 ```
 
 搬迁脚本的逻辑验证（用内存里的假 GitHub 仓库，不碰真实数据）：
 
 ```bat
-python .tools\test-migrate.py       :: 57 项断言
+python .tools\test-migrate.py       :: 66 项断言
+python .tools\test-sync.py          :: 25 项断言（同步脚本，不联网）
 ```
 
 需要跑浏览器、验证完整发文流程（先起预览服务：`node .tools/preview.js`）：
 
 ```bash
-node .tools/check-content.js            # 内容/资源/配置/错误提示文案（32 项，不用浏览器）
-python .tools/test-migrate.py           # 搬迁脚本（57 项，不碰真实仓库）
+node .tools/check-content.js            # 内容/资源/配置/错误提示文案（42 项，不用浏览器）
+python .tools/test-migrate.py           # 搬迁脚本（66 项，不碰真实仓库）
+python .tools/test-sync.py              # 同步脚本（25 项，不联网）
 python .tools/verify-hidden.py          # 隐藏文章 + 作者一栏在页面上的表现（21 项）
 python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（23 项）
 python .tools/verify-site-and-tags.py   # 写作台的标签筛选 + 站点信息（41 项）
