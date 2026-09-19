@@ -103,6 +103,7 @@
       <h1>我的文章</h1>
       <div class="group">
         <span class="pill" id="count-pill">—</span>
+        <button class="btn" id="btn-sort">排序</button>
         <button class="btn" id="btn-site">站点信息</button>
         <button class="btn btn-primary" id="btn-new">＋ 写新的</button>
       </div>
@@ -112,12 +113,26 @@
          文章一多就得滚很久才看得见，所以挪到顶栏，再补这一句说明。 -->
     <p class="admin-hint">
       首页的介绍、关于页、页脚落款不在文章里 —— 点上面的「站点信息」改。
+      想调整文章的先后顺序，点「排序」。
     </p>
 
     <div class="repo-strip" id="repo-strip"></div>
 
     <!-- 按标签筛文章：标签多了以后靠它找文章，交互和首页的标签栏一致 -->
     <div class="tagbar admin-tagbar" id="admin-tagbar" hidden></div>
+
+    <!-- 排序模式：只在点「排序」之后出现。新文章不用管，它会自动排在最前面 -->
+    <div class="sort-bar" id="sort-bar" hidden>
+      <div class="sort-note">
+        <b>按住左边的序号拖动</b>就能排顺序；也可以用 <b>↑</b> <b>↓</b> 微调，
+        或 <b>置顶</b> 一步挪到最前。排好之后记得点「保存排序」。
+        <span class="sort-tip">新发的文章不用管，它会自动排在所有文章最前面。</span>
+      </div>
+      <div class="sort-ops">
+        <button class="btn btn-primary" id="btn-sort-save">保存排序</button>
+        <button class="btn" id="btn-sort-cancel">取消</button>
+      </div>
+    </div>
 
     <ul class="admin-list" id="list"></ul>
     <div class="empty-note" id="list-empty" hidden>还没有文章，点右上角开始写第一篇。</div>
@@ -291,6 +306,7 @@
 
 <script src="assets/js/markdown.js"></script>
 <script src="assets/js/site.js"></script>
+<script src="assets/js/order.js"></script>
 <script src="assets/js/theme.js"></script>
 <script src="write.config.js"></script>
 <script src="assets/js/admin.js"></script>

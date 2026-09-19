@@ -32,6 +32,7 @@
 │   ├── js/app.js         首页/详情/归档的渲染逻辑
 │   ├── js/markdown.js    自写的迷你 Markdown 渲染器
 │   ├── js/site.js        渲染站点信息（首页介绍 / 关于页 / 页脚），前台和写作台预览共用
+│   ├── js/order.js       文章显示顺序的规则（前台和写作台共用同一份）
 │   ├── js/theme.js       明暗切换
 │   ├── js/admin.js       写作台逻辑（读写 GitHub 仓库）
 │   └── img/              头像、网页缩略图、favicon
@@ -42,7 +43,8 @@
 │       └── favicon-32.png / favicon-16.png
 ├── data/
 │   ├── posts.json        ★ 所有文章都在这个文件里
-│   └── site.json         ★ 首页介绍 / 关于页 / 页脚落款（写作台里也能改）
+│   ├── site.json         ★ 首页介绍 / 关于页 / 页脚落款（写作台里也能改）
+│   └── order.json        ★ 自定义的文章顺序（点「排序」保存后才有这个文件）
 └── .tools/               本地开发工具（已在 .gitignore，不会发布）
     ├── preview.js        本地预览服务器
     ├── make-images.py    ★ 从 .tools/source/ 的原图生成上面那几张图
@@ -51,15 +53,16 @@
     ├── verify-hidden.py  隐藏文章 + 作者一栏在页面上的表现（注入数据，最稳）
     ├── verify-write-fields.py  写作台里作者/隐藏的读写
     ├── verify-site-and-tags.py 写作台的标签筛选 + 站点信息（假仓库跑在页面内存里）
+    ├── verify-order.py   自定义排序：首页顺序 + 写作台排序 + 拖拽
     ├── verify-mobile-padding.py 手机端正文左右留白够不够
     ├── verify-looks.py   头像/图标/og 缩略图有没有真的加载出来
     ├── verify-local-file.py  本地双击打开 write.html 能不能用（file://）
     ├── verify-desktop.py 写作台在电脑宽屏下能不能用（VD_SIZE=1440x900 / 1920x1080）
     ├── migrate-via-api.py ★ 发布到 GitHub（走 API，不需要 git）
     ├── migrate.cmd       ★ 上面那个脚本的双击启动器
-    ├── sync-from-remote.py ★ 把线上内容拉回本地（文章 + 站点信息，手机改的同步过来）
-    ├── test-migrate.py   搬迁脚本的自动化测试（66 项，配 _mock_gh.py）
-    ├── test-sync.py      同步脚本的纯函数测试（25 项，不联网）
+    ├── sync-from-remote.py ★ 把线上内容拉回本地（文章 + 站点信息 + 顺序，手机改的同步过来）
+    ├── test-migrate.py   搬迁脚本的自动化测试（68 项，配 _mock_gh.py）
+    ├── test-sync.py      同步脚本的纯函数测试（26 项，不联网）
     ├── _mock_gh.py       内存里的假 GitHub API（只给 test-migrate.py 用）
     ├── verify-live.py    用真实令牌验证线上写作台（只读，崩了自动重跑）
     ├── verify-write-api.py  验证保存链路并自动清理
@@ -152,6 +155,36 @@ node .tools/preview.js
 
 文章多了以后，列表上方会出现一排标签（「全部」+ 每个标签，后面跟着篇数）。
 点一下就只看带这个标签的文章，再点「全部」恢复。
+
+### 调整文章的显示顺序
+
+首页和归档页的顺序默认是「日期新的在前」。想自己排，顶栏点「排序」：
+
+1. **电脑上：按住任意一行直接拖**（拖到哪就插到哪，拖的时候会跟着滚页面）。
+   **手机上：按住行左边的序号拖** —— 手指拖长列表本来就不精确，
+   所以手机端更推荐用每行的 `↑` `↓` / `置顶` 按钮（一键挪到最前）。
+2. 排序模式下**不显示「删除」**，免得手滑。
+3. 排好点「保存排序」—— 这是一次 commit，约 1 分钟后线上生效。
+4. 中途想放弃点「取消」；改过了会先问一句。**拖拽本身不会自动提交。**
+
+> 为什么不用浏览器自带的 HTML5 拖拽（`draggable`）：**它在触屏上根本不触发**，
+> 安卓和 iOS 都不发 `drag` 事件。所以这里用的是 Pointer Events，
+> 鼠标和手指走同一套代码；手指只在按住**序号**时才开始拖，
+> 否则会跟「上下滚动页面」打架（序号上有 `touch-action: none`）。
+
+**新发的文章不用管。** 排序的规则是两段拼起来：
+
+```
+没被排过的文章（＝新发的）按日期降序 → 排在最前面
+被排过的文章           按你排的顺序 → 排在后面
+```
+
+所以新文章永远默认在最上面，不会因为排过一次顺序就被挤到中间。
+顺序存在 `data/order.json`（写作台能改的第三个文件，和 `posts.json` /
+`site.json` 一样会被发布脚本做冲突检查）。
+
+删掉一篇文章不用去清理 `order.json`，里面多出来的 id 会被自动忽略；
+`order.json` 不存在也完全没问题，那就等价于「按日期降序」。
 
 ### 改首页介绍 / 关于页 / 页脚
 
@@ -401,31 +434,37 @@ bash .tools/publish-to-github.sh
 ## 六、自检（改完东西想确认没坏）
 
 ```bat
-node .tools\check-content.js        :: 文章数据、资源、链接、站点信息、错误文案 —— 秒级，42 项
+node .tools\check-content.js        :: 文章数据、资源、链接、站点信息、错误文案 —— 秒级，79 项
 ```
 
 搬迁脚本的逻辑验证（用内存里的假 GitHub 仓库，不碰真实数据）：
 
 ```bat
-python .tools\test-migrate.py       :: 66 项断言
-python .tools\test-sync.py          :: 25 项断言（同步脚本，不联网）
+python .tools\test-migrate.py       :: 68 项断言
+python .tools\test-sync.py          :: 26 项断言（同步脚本，不联网）
 ```
 
 需要跑浏览器、验证完整发文流程（先起预览服务：`node .tools/preview.js`）：
 
 ```bash
-node .tools/check-content.js            # 内容/资源/配置/错误提示文案（42 项，不用浏览器）
-python .tools/test-migrate.py           # 搬迁脚本（66 项，不碰真实仓库）
-python .tools/test-sync.py              # 同步脚本（25 项，不联网）
+node .tools/check-content.js            # 内容/资源/配置/错误提示文案（79 项，不用浏览器）
+python .tools/test-migrate.py           # 搬迁脚本（68 项，不碰真实仓库）
+python .tools/test-sync.py              # 同步脚本（26 项，不联网）
 python .tools/verify-hidden.py          # 隐藏文章 + 作者一栏在页面上的表现（21 项）
-python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（23 项）
-python .tools/verify-site-and-tags.py   # 写作台的标签筛选 + 站点信息（41 项）
+python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（27 项）
+python .tools/verify-site-and-tags.py   # 写作台的标签筛选 + 站点信息（42 项）
+python .tools/verify-order.py           # 自定义排序：首页顺序 + 写作台排序 + 拖拽（37 项）
 python .tools/verify-mobile-padding.py  # 手机端正文左右留白够不够（12 项）
 python .tools/verify-looks.py           # 头像/图标/og 缩略图有没有真的加载出来（7 项）
 python .tools/verify-local-file.py      # 本地双击打开 write.html 能不能用（两段）
 python .tools/verify-desktop.py         # 电脑宽屏下写作台没被挤坏（默认 1440×900）
 python .tools/screenshot.py             # 写作台全流程 + 页面检查 + 截图
 ```
+
+> **重试循环的条件只能写 `grep -q "全部通过"`，不要写 `"全部通过\|失败 "`。**
+> 沙箱里的 Chromium 会随机整进程崩掉（约 1/4 概率，与具体操作无关），
+> 崩了之后脚本会打出「失败 N 项」而不是「浏览器断开」。把「失败」也当成终止条件，
+> 循环第一轮就退出，于是永远看不到真正的结果（踩过）。
 
 浏览器脚本用的都是**内存里的假仓库**，所以验证「写作台保存 → 提交 → 站点内容跟着变」
 这条链路时**不会动到你的真实仓库**，跑完 `_preview/` 里有各个页面的截图。

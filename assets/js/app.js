@@ -8,6 +8,9 @@
 
   var DATA_URL = 'data/posts.json';
 
+  /* 自定义顺序（可选）。文件不存在就当成没有，退化成「按日期降序」 */
+  var ORDER_URL = 'data/order.json';
+
   /* 与 write.config.js 里的 defaultAuthor 保持一致。
      卡片上只在作者跟它不一样时才显示作者，免得每张卡片都在重复同一行字。 */
   var DEFAULT_AUTHOR = 'Ever Eternity';
@@ -68,17 +71,25 @@
   /* ---------- 数据加载 ---------- */
 
   function loadPosts() {
-    return fetch(DATA_URL, { cache: 'no-cache' })
-      .then(function (res) {
+    return Promise.all([
+      fetch(DATA_URL, { cache: 'no-cache' }).then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
-      })
-      .then(function (list) {
-        if (!Array.isArray(list)) throw new Error('数据格式不对');
-        return list.slice().sort(function (a, b) {
-          return String(b.date).localeCompare(String(a.date));
-        });
+      }),
+      // order.json 是可选的第二个请求：读不到、404、解析失败 —— 一律当成「没排过序」
+      fetch(ORDER_URL, { cache: 'no-cache' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; })
+    ]).then(function (both) {
+      var list = both[0], order = both[1];
+      if (!Array.isArray(list)) throw new Error('数据格式不对');
+      var ord = window.EE_ORDER;
+      if (ord) return ord.apply(list, ord.idsOf(order));
+      // order.js 没加载上也不至于开天窗：退回按日期降序
+      return list.slice().sort(function (a, b) {
+        return String(b.date).localeCompare(String(a.date));
       });
+    });
   }
 
   function setLoading() {

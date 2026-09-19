@@ -23,6 +23,10 @@ window.BLOG_CONFIG = {
   // 写作台里「站点信息」那一屏改的就是它，同样是一次 commit。
   sitePath: 'data/site.json',
 
+  // 自定义文章顺序的路径。写作台里「排序」那一屏改的就是它。
+  // 里面只有一串 id；不在这个列表里的文章（＝新发的）按日期排在最前面。
+  orderPath: 'data/order.json',
+
   // 站点地址，仅用于界面上显示提示，可留空
   siteUrl: 'https://evereternity123.github.io',
 
