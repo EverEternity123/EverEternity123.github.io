@@ -96,6 +96,27 @@
 .field-row { display: flex; gap: 12px; }
 .field-row .field { flex: 1; }
 
+/* ---------- 站点信息 ---------- */
+/* 分组小标题 */
+.form-head {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 30px 0 14px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.form-head:first-of-type { margin-top: 20px; padding-top: 0; border-top: 0; }
+
+/* 全局 textarea 的 min-height 是给正文用的，这几栏得矮一点 */
+#s-hero-tagline { min-height: 88px; }
+#s-now-items { min-height: 140px; }
+#s-about-body { min-height: 320px; }
+
+/* 预览里那个副标题，跟关于页的 .sub 长得一样 */
+#site-preview .sub { color: var(--text-3); margin: 0 0 26px; font-size: 15px; }
+
 /* ---------- 按钮 ---------- */
 .btn {
   font-family: inherit;
@@ -143,6 +164,14 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 .admin-bar .group { display: flex; gap: 8px; align-items: center; }
 
 /* ---------- 文章列表 ---------- */
+/* 标签筛选栏：复用首页 .tag-btn 的外观，只把下边距收窄一点（列表里不需要那么多空） */
+.admin-tagbar {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.admin-tagbar .tag-btn { font-size: 12.5px; padding: 4px 11px; }
+
 .admin-list { list-style: none; margin: 0 0 24px; padding: 0; }
 
 .admin-list li {

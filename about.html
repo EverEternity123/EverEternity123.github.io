@@ -51,10 +51,11 @@
 
 <main class="wrap-narrow about-page">
   <h1>关于</h1>
-  <p class="sub">一个不太擅长自我介绍的人</p>
+  <!-- 副标题和下面这整段正文都由 data/site.json 提供，在写作台的「站点信息」里改。
+       这里保留一份静态兜底：万一 site.json 没加载出来，页面也不会开天窗。 -->
+  <p class="sub" id="about-sub">一个不太擅长自我介绍的人</p>
 
-  <!-- ============ 下面这段换成你自己的话就行 ============ -->
-  <div class="about-body">
+  <div class="about-body" id="about-body">
 
     <p>
       你好，我是 <strong>Ever Eternity</strong>。
@@ -101,13 +102,12 @@
     </p>
 
   </div>
-  <!-- ============ 关于部分结束 ============ -->
 
 </main>
 
 <footer class="site-footer">
   <div class="wrap footer-inner">
-    <div>© 2026 Ever Eternity · 慢慢写，慢慢活</div>
+    <div id="footer-note">© 2026 Ever Eternity · 慢慢写，慢慢活</div>
     <div class="footer-links">
       <a href="index.html">首页</a>
       <a href="archive.html">归档</a>
@@ -117,6 +117,7 @@
 </footer>
 
 <script src="assets/js/markdown.js"></script>
+<script src="assets/js/site.js"></script>
 <script src="assets/js/theme.js"></script>
 <script src="assets/js/app.js"></script>
 </body>

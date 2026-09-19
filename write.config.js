@@ -19,6 +19,10 @@ window.BLOG_CONFIG = {
   // 文章数据在这个仓库里的路径（相对仓库根目录）
   path: 'data/posts.json',
 
+  // 站点信息（首页介绍、关于页、页脚）的路径。
+  // 写作台里「站点信息」那一屏改的就是它，同样是一次 commit。
+  sitePath: 'data/site.json',
+
   // 站点地址，仅用于界面上显示提示，可留空
   siteUrl: 'https://evereternity123.github.io',
 

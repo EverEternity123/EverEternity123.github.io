@@ -236,6 +236,7 @@ html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
   color: var(--text-2);
   font-size: 16.5px;
   max-width: 46ch;
+  white-space: pre-line;   /* 允许在写作台里用换行控制断句 */
 }
 
 .hero .meta-row {
@@ -458,7 +459,11 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   transition: width .1s linear;
 }
 
-.post-page { padding: 54px 0 60px; }
+/* 注意：这里只能用 padding-top/bottom 分开写，不能用 padding 简写。
+   本页 main 同时带 .wrap-narrow（负责左右 24px 留白），简写会把左右内边距
+   一并重置为 0；而本规则位置更靠后，同优先级下会赢 —— 桌面端因容器居中看不出来，
+   手机上一贴边就露馅。改动前请跑 .tools/verify-mobile-padding.py。 */
+.post-page { padding-top: 54px; padding-bottom: 60px; }
 
 /* 隐藏文章在文章页顶部的提醒（只有拿到链接直接打开才会看到） */
 .hidden-note {
@@ -626,7 +631,8 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 .post-nav a.next { text-align: right; }
 
 /* ---------- 关于页 ---------- */
-.about-page { padding: 54px 0 70px; }
+/* 同 .post-page：不能用 padding 简写，否则会吃掉 .wrap-narrow 的左右留白 */
+.about-page { padding-top: 54px; padding-bottom: 70px; }
 .about-page h1 {
   font-family: var(--font-serif);
   font-size: clamp(28px, 4.4vw, 38px);
@@ -728,7 +734,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 760px) {
-  .wrap, .wrap-narrow { padding: 0 18px; }
+  .wrap, .wrap-narrow { padding: 0 20px; }
   .hero { padding: 44px 0 34px; }
   .hero-inner { flex-direction: column; gap: 18px; }
   .avatar { width: 62px; height: 62px; }
@@ -736,7 +742,8 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   .search-box, .search-box input { width: 100%; }
   .post-card { padding: 18px 14px 18px 16px; }
   .post-card h3 { font-size: 19px; }
-  .post-page, .about-page { padding: 32px 0 48px; }
+  /* 同上：只调上下，左右留白交给 .wrap-narrow */
+  .post-page, .about-page { padding-top: 32px; padding-bottom: 48px; }
   .post-body { font-size: 16.5px; line-height: 1.95; }
   .post-nav { grid-template-columns: 1fr; }
   .post-nav a.next { text-align: left; }

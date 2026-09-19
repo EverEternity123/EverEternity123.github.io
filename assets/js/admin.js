@@ -23,7 +23,10 @@
     posts: [],
     editing: null,
     original: null,
-    isNew: true
+    isNew: true,
+    filterTag: '',    // 列表页当前选中的标签，'' = 全部
+    site: null,       // data/site.json 的内容（首页介绍 / 关于页 / 页脚）
+    siteSha: null     // site.json 的 blob sha，提交时必须带上
   };
 
   /* ======================================================================
@@ -47,7 +50,7 @@
   }
 
   function show(view) {
-    ['connect', 'list', 'edit'].forEach(function (v) {
+    ['connect', 'list', 'edit', 'site'].forEach(function (v) {
       $('#view-' + v).hidden = (v !== view);
     });
     window.scrollTo(0, 0);
@@ -129,10 +132,19 @@
     });
   }
 
-  function contentsPath() {
+  /* 仓库里任意一个文件的 Contents API 地址 */
+  function contentsPathOf(p) {
     return '/repos/' + encodeURIComponent(CFG.owner) + '/' +
            encodeURIComponent(CFG.repo) + '/contents/' +
-           String(CFG.path || '').split('/').map(encodeURIComponent).join('/');
+           String(p || '').split('/').map(encodeURIComponent).join('/');
+  }
+
+  function contentsPath() {
+    return contentsPathOf(CFG.path);
+  }
+
+  function sitePath() {
+    return CFG.sitePath || 'data/site.json';
   }
 
   function loadPosts() {
@@ -234,6 +246,9 @@
     state.user = '';
     state.sha = null;
     state.posts = [];
+    state.filterTag = '';
+    state.site = null;
+    state.siteSha = null;
     $('#f-token').value = '';
     renderConnect();
     show('connect');
@@ -243,10 +258,65 @@
      文章列表
      ====================================================================== */
 
+  /* 数一遍所有标签：list 按「出现次数多的在前」排，count 是每个标签的篇数。
+     和首页的标签栏同一套口径（含已隐藏的文章 —— 这里是管理界面，得看全）。 */
+  function tagStats(posts) {
+    var count = Object.create(null);
+    posts.forEach(function (p) {
+      (p.tags || []).forEach(function (t) {
+        var k = String(t).trim();
+        if (k) count[k] = (count[k] || 0) + 1;
+      });
+    });
+    var list = Object.keys(count).sort(function (a, b) {
+      return count[b] - count[a] || a.localeCompare(b, 'zh');
+    });
+    return { list: list, count: count };
+  }
+
+  /* 当前筛选下要显示的文章 */
+  function visiblePosts() {
+    if (!state.filterTag) return state.posts;
+    return state.posts.filter(function (p) {
+      return (p.tags || []).indexOf(state.filterTag) !== -1;
+    });
+  }
+
+  function renderTagbar() {
+    var bar = $('#admin-tagbar');
+    if (!bar) return;
+
+    var st = tagStats(state.posts);
+    // 选中的标签可能已经不存在了（比如刚删掉最后一篇用它标过的文章）
+    if (state.filterTag && st.list.indexOf(state.filterTag) === -1) state.filterTag = '';
+
+    if (!st.list.length) { bar.innerHTML = ''; bar.hidden = true; return; }
+
+    var html = '<button class="tag-btn' + (state.filterTag ? '' : ' on') +
+               '" data-tag="">全部<span class="count">' + state.posts.length + '</span></button>';
+    st.list.forEach(function (t) {
+      html += '<button class="tag-btn' + (state.filterTag === t ? ' on' : '') +
+              '" data-tag="' + esc(t) + '">' + esc(t) +
+              '<span class="count">' + st.count[t] + '</span></button>';
+    });
+    bar.innerHTML = html;
+    bar.hidden = false;
+  }
+
   function renderList() {
     var ul = $('#list');
-    $('#count-pill').textContent = state.posts.length + ' 篇';
-    $('#list-empty').hidden = state.posts.length > 0;
+    renderTagbar();
+
+    var shown = visiblePosts();
+    $('#count-pill').textContent = state.filterTag
+      ? shown.length + ' / ' + state.posts.length + ' 篇'
+      : state.posts.length + ' 篇';
+
+    var empty = $('#list-empty');
+    empty.hidden = shown.length > 0;
+    empty.textContent = state.filterTag
+      ? '没有「' + state.filterTag + '」标签的文章。'
+      : '还没有文章，点右上角开始写第一篇。';
 
     $('#repo-strip').innerHTML =
       '<span class="repo-ok">●</span> ' +
@@ -254,7 +324,7 @@
       '<span class="repo-meta">' + esc(CFG.branch || 'main') +
       (state.user ? ' · 已连接 ' + esc(state.user) : '') + '</span>';
 
-    ul.innerHTML = state.posts.map(function (p) {
+    ul.innerHTML = shown.map(function (p) {
       var tags = (p.tags || []).map(function (t) {
         return '<span class="pill">' + esc(t) + '</span>';
       }).join(' ');
@@ -537,6 +607,175 @@
   }
 
   /* ======================================================================
+     站点信息（data/site.json）
+     ----------------------------------------------------------------------
+     首页那段自我介绍、关于页、页脚落款。跟文章一样是一次 commit。
+     字段顺序固定，方便看 diff；也为空就删掉，保持文件干净。
+     ====================================================================== */
+
+  var DEFAULT_SITE = {
+    hero: { title: '', tagline: '', chips: [] },
+    about: { sub: '', now: { title: '', items: [] }, body: '' },
+    footer: { note: '' }
+  };
+
+  function loadSite() {
+    var ref = encodeURIComponent(CFG.branch || 'main');
+    return gh(contentsPathOf(sitePath()) + '?ref=' + ref).then(function (data) {
+      if (!data || typeof data.content !== 'string') {
+        throw new Error('站点信息读取失败');
+      }
+      state.siteSha = data.sha;
+      var obj = JSON.parse(b64decode(data.content));
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        throw new Error('site.json 格式不对：顶层应该是一个对象');
+      }
+      state.site = obj;
+      return true;                       // true = 远端有这个文件
+    }).catch(function (err) {
+      if (err.status === 404) {          // 还没有这个文件：从空开始，保存时会创建
+        state.siteSha = null;
+        state.site = JSON.parse(JSON.stringify(DEFAULT_SITE));
+        return false;
+      }
+      throw err;
+    });
+  }
+
+  /* 「此刻」条目在界面里是「名称 | 内容」一行一条 */
+  function nowToLines(now) {
+    return ((now && now.items) || []).map(function (it) {
+      return (it.label || '') + ' | ' + (it.text || '');
+    }).join('\n');
+  }
+
+  function linesToNow(text) {
+    return String(text || '').split('\n').map(function (ln) {
+      var i = ln.indexOf('|');
+      var label = (i < 0 ? ln : ln.slice(0, i)).trim();
+      var val = (i < 0 ? '' : ln.slice(i + 1)).trim();
+      return { label: label, text: val };
+    }).filter(function (it) {
+      return it.label || it.text;
+    }).slice(0, 12);
+  }
+
+  function fillSiteForm() {
+    var s = state.site || DEFAULT_SITE;
+    var hero = s.hero || {}, about = s.about || {}, now = about.now || {};
+    var footer = s.footer || {};
+
+    $('#s-hero-title').value = hero.title || '';
+    $('#s-hero-tagline').value = hero.tagline || '';
+    $('#s-hero-chips').value = (hero.chips || []).join(', ');
+    $('#s-about-sub').value = about.sub || '';
+    $('#s-now-title').value = now.title || '';
+    $('#s-now-items').value = nowToLines(now);
+    $('#s-about-body').value = about.body || '';
+    $('#s-footer-note').value = footer.note || '';
+
+    $('#site-preview-wrap').hidden = true;
+    $('#btn-site-preview').textContent = '预览关于页';
+  }
+
+  function readSiteForm() {
+    return {
+      hero: {
+        title: $('#s-hero-title').value.trim(),
+        tagline: $('#s-hero-tagline').value.trim(),
+        chips: $('#s-hero-chips').value.split(/[,，]/)
+                 .map(function (t) { return t.trim(); })
+                 .filter(Boolean).slice(0, 6)
+      },
+      about: {
+        sub: $('#s-about-sub').value.trim(),
+        now: {
+          title: $('#s-now-title').value.trim(),
+          items: linesToNow($('#s-now-items').value)
+        },
+        body: $('#s-about-body').value
+      },
+      footer: {
+        note: $('#s-footer-note').value.trim()
+      }
+    };
+  }
+
+  function isSiteDirty() {
+    if (!state.site) return false;
+    return JSON.stringify(readSiteForm()) !== JSON.stringify(state.site);
+  }
+
+  function openSite() {
+    var btn = $('#btn-site');
+    btn.disabled = true;
+    loadSite().then(function (exists) {
+      fillSiteForm();
+      // 基线设成「表单现在的样子」，这样脏检查只反映用户自己的改动
+      state.site = readSiteForm();
+      $('#site-missing').hidden = (exists !== false);
+      show('site');
+    }).catch(function (err) {
+      toast(err.message, true);
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
+  function backFromSite() {
+    if (isSiteDirty() && !confirm('站点信息有改动还没保存，确定要离开吗？')) return;
+    state.site = null;                   // 下次进来重新拉一遍，拿到最新的 sha
+    renderList();
+    show('list');
+  }
+
+  function saveSite() {
+    var site = readSiteForm();
+    var btn = $('#btn-site-save');
+    btn.disabled = true;
+    btn.textContent = '提交中…';
+
+    var body = {
+      message: '更新站点信息',
+      content: b64encode(JSON.stringify(site, null, 2) + '\n'),
+      branch: CFG.branch || 'main'
+    };
+    if (state.siteSha) body.sha = state.siteSha;
+
+    gh(contentsPathOf(sitePath()), { method: 'PUT', body: body }).then(function (data) {
+      if (data && data.content && data.content.sha) state.siteSha = data.content.sha;
+      state.site = site;
+      $('#site-missing').hidden = true;
+      var sha = data && data.commit && data.commit.sha ? data.commit.sha.slice(0, 7) : '';
+      toast('已提交' + (sha ? '（' + sha + '）' : '') + '，网站约 1 分钟后更新');
+    }).catch(function (err) {
+      // 撞车（文件在别处被改过）：重新拉一次，免得下次还带着过期的 sha
+      return loadSite().catch(function () {}).then(function () {
+        toast(err.message, true);
+      });
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = '保存并发布';
+    });
+  }
+
+  function toggleSitePreview() {
+    var wrap = $('#site-preview-wrap');
+    if (!wrap.hidden) {
+      wrap.hidden = true;
+      $('#btn-site-preview').textContent = '预览关于页';
+      return;
+    }
+    var about = readSiteForm().about;
+    $('#site-preview').innerHTML =
+      '<p class="sub">' + esc(about.sub) + '</p>' +
+      SITE.aboutBodyHTML(about.body, about.now);
+    wrap.hidden = false;
+    $('#btn-site-preview').textContent = '收起预览';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* ======================================================================
      绑定
      ====================================================================== */
 
@@ -569,6 +808,12 @@
     $('#btn-refresh').addEventListener('click', refresh);
     $('#btn-export').addEventListener('click', doExport);
 
+    /* ---------- 站点信息 ---------- */
+    $('#btn-site').addEventListener('click', openSite);
+    $('#btn-site-back').addEventListener('click', backFromSite);
+    $('#btn-site-save').addEventListener('click', saveSite);
+    $('#btn-site-preview').addEventListener('click', toggleSitePreview);
+
     $('#btn-disconnect').addEventListener('click', function () {
       if (!confirm('断开写作台？\n\n会清掉这台设备上记住的令牌，下次要重新贴一次。\n' +
                    '（文章不受影响）')) return;
@@ -585,6 +830,16 @@
       if (btn.getAttribute('data-act') === 'edit') openEditor(post);
       else doDelete(id, post.title);
     });
+
+    var tagbar = $('#admin-tagbar');
+    if (tagbar) {
+      tagbar.addEventListener('click', function (e) {
+        var btn = e.target.closest('.tag-btn');
+        if (!btn) return;
+        state.filterTag = btn.getAttribute('data-tag') || '';
+        renderList();
+      });
+    }
 
     $('#btn-draft-restore').addEventListener('click', function () {
       var draft = readDraft(state.editing.id);
@@ -613,7 +868,9 @@
       });
 
     window.addEventListener('beforeunload', function (e) {
-      if (!$('#view-edit').hidden && isDirty()) {
+      var dirty = (!$('#view-edit').hidden && isDirty()) ||
+                  (!$('#view-site').hidden && isSiteDirty());
+      if (dirty) {
         e.preventDefault();
         e.returnValue = '';
       }

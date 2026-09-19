@@ -406,6 +406,13 @@
     initToTop();
     setLoading();
 
+    // 站点信息（首页介绍 / 关于页 / 页脚）是独立的，文章挂了也不该连累它
+    if (window.SITE) {
+      window.SITE.load().then(window.SITE.apply).catch(function (err) {
+        console.warn('[app] 站点信息没读到，沿用页面里的静态内容', err);
+      });
+    }
+
     loadPosts().then(function (list) {
       POSTS = list;
       initIndex();

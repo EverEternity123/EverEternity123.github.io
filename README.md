@@ -31,6 +31,7 @@
 │   ├── css/admin.css     写作台样式
 │   ├── js/app.js         首页/详情/归档的渲染逻辑
 │   ├── js/markdown.js    自写的迷你 Markdown 渲染器
+│   ├── js/site.js        渲染站点信息（首页介绍 / 关于页 / 页脚），前台和写作台预览共用
 │   ├── js/theme.js       明暗切换
 │   ├── js/admin.js       写作台逻辑（读写 GitHub 仓库）
 │   └── img/              头像、网页缩略图、favicon
@@ -39,7 +40,9 @@
 │       ├── apple-touch-icon.png  加到手机桌面时的图标
 │       ├── brand-64.png       页头左上角的小图标
 │       └── favicon-32.png / favicon-16.png
-├── data/posts.json       ★ 所有文章都在这个文件里
+├── data/
+│   ├── posts.json        ★ 所有文章都在这个文件里
+│   └── site.json         ★ 首页介绍 / 关于页 / 页脚落款（写作台里也能改）
 └── .tools/               本地开发工具（已在 .gitignore，不会发布）
     ├── preview.js        本地预览服务器
     ├── make-images.py    ★ 从 .tools/source/ 的原图生成上面那几张图
@@ -47,17 +50,21 @@
     ├── screenshot.py     端到端自检 + 截图（8 段，见第六节）
     ├── verify-hidden.py  隐藏文章 + 作者一栏在页面上的表现（注入数据，最稳）
     ├── verify-write-fields.py  写作台里作者/隐藏的读写
+    ├── verify-site-and-tags.py 写作台的标签筛选 + 站点信息（假仓库跑在页面内存里）
+    ├── verify-mobile-padding.py 手机端正文左右留白够不够
     ├── verify-looks.py   头像/图标/og 缩略图有没有真的加载出来
     ├── verify-local-file.py  本地双击打开 write.html 能不能用（file://）
     ├── verify-desktop.py 写作台在电脑宽屏下能不能用（VD_SIZE=1440x900 / 1920x1080）
     ├── migrate-via-api.py ★ 发布到 GitHub（走 API，不需要 git）
     ├── migrate.cmd       ★ 上面那个脚本的双击启动器
     ├── sync-from-remote.py ★ 把线上文章拉回本地（手机上写的同步过来）
-    ├── test-migrate.py   搬迁脚本的自动化测试（假 GitHub API）
+    ├── test-migrate.py   搬迁脚本的自动化测试（57 项，配 _mock_gh.py）
+    ├── _mock_gh.py       内存里的假 GitHub API（只给 test-migrate.py 用）
     ├── verify-live.py    用真实令牌验证线上写作台（只读，崩了自动重跑）
     ├── verify-write-api.py  验证保存链路并自动清理
     ├── _probe-409.py     一次性探针：拦截下的 4xx 会不会把 Chromium 弄崩
     ├── _probe-live-route.py  一次性探针：线上自动登录到底崩在哪一步
+    ├── _shot-new-post.py 一次性脚本：核对新发的文章在页面上长得对不对
     ├── source/           图片原图（刘看山.jpeg，不发布，留着重新生成）
     └── publish-to-github.sh  给装了 Git Bash 的人用的备选方案
 ```
@@ -139,6 +146,25 @@ node .tools/preview.js
 
 写了一半被打断也没关系：编辑内容每 0.7 秒自动存一份草稿在本地，
 下次打开这篇文章会提示你恢复。
+
+### 按标签筛文章
+
+文章多了以后，列表上方会出现一排标签（「全部」+ 每个标签，后面跟着篇数）。
+点一下就只看带这个标签的文章，再点「全部」恢复。
+
+### 改首页介绍 / 关于页 / 页脚
+
+这些「固定页面」的内容不在文章里，而在 `data/site.json`，写作台里也能改：
+
+1. 列表页点「站点信息」
+2. 上面是首页（大标题、一句话介绍、小标签），中间是「关于页」，下面是页脚落款
+3. 「关于页」的正文支持 Markdown；单独一行写 `{{此刻}}`，那张「此刻」卡片就渲染在
+   那个位置（不写就放在正文最后）
+4. 「此刻」的条目每行一条，写成 `名称 | 内容`，例如 `在读 | 一本没读完的散文集`
+5. 「预览关于页」看效果 → 「保存并发布」
+
+`data/site.json` 里任何一段留空，页面上就保持原样不替换 —— 所以就算这个文件
+丢了或者写坏了，首页和关于页也不会开天窗。
 
 ---
 
@@ -232,16 +258,32 @@ python .tools\migrate-via-api.py --apply    :: 真正执行
 `data/posts.json` 是唯一会被**两边同时改**的文件：你在手机上写完就提交了，
 而本地这份还是旧的。如果直接推送，手机上刚写的文章会被抹掉。
 
-所以脚本默认会先比对远端的 `data/posts.json`：
+所以脚本默认会先比对远端的 `data/posts.json`，分三种情况：
 
-- **两边一样** → 直接继续，你什么都不用管。
-- **两边不一样** → **停下**（退出码 2），列出「只在远端有的文章」，
-  要求你显式选一个：
+| 情况 | 脚本怎么做 |
+|---|---|
+| **两边一样** | 直接继续，你什么都不用管 |
+| **本地只是多出几篇**（纯新增） | **直接继续** —— 远端一篇都不会少，还会把你的新文章补上去 |
+| **远端有本地没有的**，或**同一个 id 两边内容不同** | **停下**（退出码 2），列出来要求你显式选 |
+
+第三种才是真危险，它有两种情形，都会丢东西：
+
+- **远端有本地没有的** —— 多半是你手机上刚写的，推上去就没了
+- **同一个 id 两边内容不同** —— 远端的可能是你手机上改的新版，会被本地旧版盖掉
+
+停下时要求二选一：
 
 ```bat
 python .tools\migrate-via-api.py --apply --take-remote    :: 采用远端的（推荐，手机写的不丢）
 python .tools\migrate-via-api.py --apply --keep-local     :: 坚持用本地覆盖远端
 ```
+
+> 第二条「本地只是多出几篇就直接放行」是 2026-09-18 补上的。
+> 在那之前，**本地新增一篇文章后发布会被当成冲突拦下**，而推荐的 `--take-remote`
+> 恰好会把刚写的新文章删掉；而且打印「只在本地有」那一行时还会
+> `TypeError: unhashable type: 'dict'` 直接崩。根因是冲突判定没区分
+> 「远端有本地没有」（危险）和「本地有远端没有」（安全）。
+> 现在 `test-migrate.py` 里专门有这一段（`[2b]`，7 条断言）盯着它。
 
 推荐的做法是**先把线上内容拉回本地**，改完再推：
 
@@ -271,7 +313,7 @@ python .tools\sync-from-remote.py --apply    :: 真的拉回来（本地旧版�
 python .tools\test-migrate.py
 ```
 
-35 项断言，包括：空令牌被拒绝、远端比本地新时会停下、`--take-remote`
+57 项断言，包括：空令牌被拒绝、远端比本地新时会停下、`--take-remote`
 采用远端、`--keep-local` 明确覆盖、备份分支是否指向旧 HEAD、新提交的父提交
 对不对、旧文件是否被清干净、17 个文件内容是否与本地完全一致（含中文和空的
 `.nojekyll`）、令牌是否被回显。**它把脚本指到临时目录里的站点副本上跑，
@@ -341,31 +383,38 @@ bash .tools/publish-to-github.sh
 ## 六、自检（改完东西想确认没坏）
 
 ```bat
-node .tools\check-content.js        :: 文章数据、资源、链接、错误文案 —— 秒级，21 项
+node .tools\check-content.js        :: 文章数据、资源、链接、站点信息、错误文案 —— 秒级，32 项
 ```
 
 搬迁脚本的逻辑验证（用内存里的假 GitHub 仓库，不碰真实数据）：
 
 ```bat
-python .tools\test-migrate.py       :: 39 项断言
+python .tools\test-migrate.py       :: 57 项断言
 ```
 
 需要跑浏览器、验证完整发文流程（先起预览服务：`node .tools/preview.js`）：
 
 ```bash
-node .tools/check-content.js            # 内容/资源/配置/错误提示文案（21 项，不用浏览器）
-python .tools/test-migrate.py           # 搬迁脚本（39 项，不碰真实仓库）
+node .tools/check-content.js            # 内容/资源/配置/错误提示文案（32 项，不用浏览器）
+python .tools/test-migrate.py           # 搬迁脚本（57 项，不碰真实仓库）
 python .tools/verify-hidden.py          # 隐藏文章 + 作者一栏在页面上的表现（21 项）
 python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（23 项）
+python .tools/verify-site-and-tags.py   # 写作台的标签筛选 + 站点信息（41 项）
+python .tools/verify-mobile-padding.py  # 手机端正文左右留白够不够（12 项）
 python .tools/verify-looks.py           # 头像/图标/og 缩略图有没有真的加载出来（7 项）
 python .tools/verify-local-file.py      # 本地双击打开 write.html 能不能用（两段）
 python .tools/verify-desktop.py         # 电脑宽屏下写作台没被挤坏（默认 1440×900）
 python .tools/screenshot.py             # 写作台全流程 + 页面检查 + 截图
 ```
 
-浏览器脚本都会把 GitHub API 拦截成一个**内存里的假仓库**，
-所以验证「写作台保存 → 提交 → 站点内容跟着变」这条链路时
-**不会动到你的真实仓库**，跑完 `_preview/` 里有各个页面的截图。
+浏览器脚本用的都是**内存里的假仓库**，所以验证「写作台保存 → 提交 → 站点内容跟着变」
+这条链路时**不会动到你的真实仓库**，跑完 `_preview/` 里有各个页面的截图。
+
+> `verify-site-and-tags.py` 走的是「把 `fetch` 换掉」的路子，假仓库完全跑在页面里，
+> 一个网络请求都不发。原因见下面「拦截请求会崩」那段 —— 沙箱里的 Chromium 现在只要
+> 拦到跨域请求就整进程崩，连原本能跑的 `verify-write-fields.py` 也一样崩。
+> 两个坑别再踩：返回值不能用 `new Response(...)` 构造；注入的脚本不能超过约 30KB
+> （所以文章用的是六篇合成数据，真实 `data/posts.json` 的结构由 `check-content.js` 校验）。
 
 ### 手机端 / 电脑端都验过
 
@@ -405,6 +454,23 @@ E2E_PART=pages      python .tools/screenshot.py  # 页面检查 + 截图（8 项
 ```
 
 同理，`.tools/verify-live.py` 和 `.tools/verify-local-file.py` 也各分两段跑。
+
+### 拦截请求现在会直接把浏览器弄崩（2026-09-19）
+
+这台沙箱的环境又退化了一步：**只要 `page.route` 拦到跨域请求，Chromium 就整进程崩**，
+连改动前一直能跑的 `verify-write-fields.py` 也一样崩（稳定复现，不是随机）。
+所以新写的 `verify-site-and-tags.py` 换了个路子 —— 用 `add_init_script` 把页面里的
+`fetch` 换掉，假仓库完全跑在页面内存里，一个网络请求都不发。
+
+两个已经踩过的坑，改那个脚本时别碰：
+
+- **返回值不能用 `new Response(...)` 构造**，一构造就崩。手搓一个
+  `{ok, status, text()}` 就够了（`admin.js` 的 `gh()` 只用到这三样）。
+- **注入的脚本不能超过约 30KB**，超了就崩。所以那边文章用的是六篇合成小数据；
+  真实 `data/posts.json` / `data/site.json` 的结构由 `check-content.js` 负责校验。
+
+另外：`browser.close()` 会把整个 python 进程 SIGTERM 掉，**连带把调用它的 shell 也带走** ——
+所以「跑完自动重试几次」的 shell 循环只会跑第一次，别指望它。
 
 ### 如果看到「浏览器断开」
 

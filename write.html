@@ -109,10 +109,14 @@
 
     <div class="repo-strip" id="repo-strip"></div>
 
+    <!-- 按标签筛文章：标签多了以后靠它找文章，交互和首页的标签栏一致 -->
+    <div class="tagbar admin-tagbar" id="admin-tagbar" hidden></div>
+
     <ul class="admin-list" id="list"></ul>
     <div class="empty-note" id="list-empty" hidden>还没有文章，点右上角开始写第一篇。</div>
 
     <div class="admin-actions">
+      <button class="btn" id="btn-site">站点信息</button>
       <button class="btn" id="btn-refresh">刷新</button>
       <button class="btn" id="btn-export">导出备份</button>
       <button class="btn btn-ghost" id="btn-disconnect">断开连接</button>
@@ -196,12 +200,91 @@
       </div>
     </div>
   </section>
+  <!-- ================= 站点信息 ================= -->
+  <!-- 首页介绍、关于页、页脚落款。改的是 data/site.json，同样一次 commit 就上线。 -->
+  <section id="view-site" hidden>
+    <div class="admin-bar">
+      <button class="btn btn-ghost" id="btn-site-back">← 返回列表</button>
+      <div class="group">
+        <span class="pill" id="site-state">站点信息</span>
+      </div>
+    </div>
+
+    <div class="banner banner-warn" id="site-missing" hidden>
+      仓库里还没有 <code>data/site.json</code>，保存时会自动建一个。
+    </div>
+
+    <p class="lead">这里是博客的固定页面：首页那段自我介绍、关于页、页脚落款。
+      保存会提交到仓库，网站大约 1 分钟后更新。</p>
+
+    <h2 class="form-head">首页</h2>
+
+    <label class="field">
+      <span>大标题</span>
+      <input type="text" id="s-hero-title" maxlength="60" placeholder="慢慢写，慢慢活">
+    </label>
+
+    <label class="field">
+      <span>一句话介绍</span>
+      <textarea id="s-hero-tagline" rows="3" maxlength="400"
+        placeholder="这里是 …… 的自留地。记录一些没什么用、但舍不得忘的事。"></textarea>
+    </label>
+
+    <label class="field">
+      <span>小标签（逗号分隔，可以留空）</span>
+      <input type="text" id="s-hero-chips" placeholder="生活随笔, 更新不规律">
+    </label>
+
+    <h2 class="form-head">关于页</h2>
+
+    <label class="field">
+      <span>副标题</span>
+      <input type="text" id="s-about-sub" maxlength="80" placeholder="一个不太擅长自我介绍的人">
+    </label>
+
+    <label class="field">
+      <span>「此刻」卡片标题（留空 = 不显示这张卡片）</span>
+      <input type="text" id="s-now-title" maxlength="60" placeholder="此刻（2026 年 9 月）">
+    </label>
+
+    <label class="field">
+      <span>「此刻」内容 · 每行一条，写成「名称 | 内容」</span>
+      <textarea id="s-now-items" rows="5"
+        placeholder="在读 | 一本翻了很多次都没读完的散文集&#10;在练 | 走路不戴耳机"></textarea>
+    </label>
+
+    <label class="field">
+      <span>正文 · 支持 Markdown</span>
+      <textarea id="s-about-body" rows="14"
+        placeholder="你好，我是 **Ever Eternity**。&#10;&#10;## 小标题&#10;&#10;- 列表&#10;&#10;单独一行写 {{此刻}}，卡片就放在那个位置。"></textarea>
+    </label>
+
+    <div id="site-preview-wrap" hidden>
+      <div class="preview-label">预览</div>
+      <div class="post-body about-body preview" id="site-preview"></div>
+    </div>
+
+    <h2 class="form-head">页脚</h2>
+
+    <label class="field">
+      <span>落款（页脚显示成「© 2026 Ever Eternity · 这里」）</span>
+      <input type="text" id="s-footer-note" maxlength="60" placeholder="慢慢写，慢慢活">
+    </label>
+
+    <div class="edit-actions">
+      <div class="inner">
+        <button class="btn" id="btn-site-preview">预览关于页</button>
+        <button class="btn btn-primary" id="btn-site-save">保存并发布</button>
+      </div>
+    </div>
+  </section>
 
 </main>
 
 <div class="toast" id="toast"></div>
 
 <script src="assets/js/markdown.js"></script>
+<script src="assets/js/site.js"></script>
 <script src="assets/js/theme.js"></script>
 <script src="write.config.js"></script>
 <script src="assets/js/admin.js"></script>

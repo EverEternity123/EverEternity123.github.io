@@ -53,12 +53,14 @@
   <div class="wrap hero-inner">
     <div class="avatar"><img src="assets/img/avatar.jpeg" alt="Ever Eternity" width="76" height="76"></div>
     <div>
-      <h1>慢慢写，慢慢活</h1>
-      <p class="tagline">
+      <!-- 下面这些文字由 data/site.json 提供（写作台「站点信息」可改）。
+           这里写的是没加载出来时的兜底内容，正常情况下会被替换掉。 -->
+      <h1 id="hero-title">慢慢写，慢慢活</h1>
+      <p class="tagline" id="hero-tagline">
         这里是 Ever Eternity 的自留地。记录一些没什么用、但舍不得忘的事——
         做过的饭、走过的路、凌晨醒来的那一个小时。
       </p>
-      <div class="meta-row">
+      <div class="meta-row" id="hero-chips">
         <span class="chip">生活随笔</span>
         <span class="chip">更新不规律</span>
         <a class="chip" href="about.html">关于我 →</a>
@@ -81,7 +83,7 @@
 
 <footer class="site-footer">
   <div class="wrap footer-inner">
-    <div>© 2026 Ever Eternity · 慢慢写，慢慢活</div>
+    <div id="footer-note">© 2026 Ever Eternity · 慢慢写，慢慢活</div>
     <div class="footer-links">
       <a href="index.html">首页</a>
       <a href="archive.html">归档</a>
@@ -91,6 +93,7 @@
 </footer>
 
 <script src="assets/js/markdown.js"></script>
+<script src="assets/js/site.js"></script>
 <script src="assets/js/theme.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
