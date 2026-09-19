@@ -54,6 +54,7 @@
     ├── verify-write-fields.py  写作台里作者/隐藏的读写
     ├── verify-site-and-tags.py 写作台的标签筛选 + 站点信息（假仓库跑在页面内存里）
     ├── verify-order.py   自定义排序：首页顺序 + 写作台排序 + 拖拽
+    ├── verify-order-desktop.py  电脑端拖拽（真鼠标；单独一个上下文）
     ├── verify-mobile-padding.py 手机端正文左右留白够不够
     ├── verify-looks.py   头像/图标/og 缩略图有没有真的加载出来
     ├── verify-local-file.py  本地双击打开 write.html 能不能用（file://）
@@ -161,11 +162,18 @@ node .tools/preview.js
 首页和归档页的顺序默认是「日期新的在前」。想自己排，顶栏点「排序」：
 
 1. **电脑上：按住任意一行直接拖**（拖到哪就插到哪，拖的时候会跟着滚页面）。
+   拖动时那一行会**抬起来**——描边加粗、轻微放大、序号变成实心徽章，
+   其它行平滑滑动让位，松手时落点闪一下。
    **手机上：按住行左边的序号拖** —— 手指拖长列表本来就不精确，
    所以手机端更推荐用每行的 `↑` `↓` / `置顶` 按钮（一键挪到最前）。
 2. 排序模式下**不显示「删除」**，免得手滑。
 3. 排好点「保存排序」—— 这是一次 commit，约 1 分钟后线上生效。
 4. 中途想放弃点「取消」；改过了会先问一句。**拖拽本身不会自动提交。**
+
+> **`↑` `↓` `置顶` 按钮只在触屏上出现。** 判据是**输入能力**（`pointer: fine` /
+> `pointer: coarse`），不是屏幕宽度——用宽度判断的话，把浏览器窗口拉窄就会
+> 把按钮藏掉，那种情况下反而没法操作了。所以电脑端（鼠标 / 触控板）只有拖拽，
+> 手机 / 平板保留按钮兜底。
 
 > 为什么不用浏览器自带的 HTML5 拖拽（`draggable`）：**它在触屏上根本不触发**，
 > 安卓和 iOS 都不发 `drag` 事件。所以这里用的是 Pointer Events，
@@ -453,7 +461,8 @@ python .tools/test-sync.py              # 同步脚本（26 项，不联网）
 python .tools/verify-hidden.py          # 隐藏文章 + 作者一栏在页面上的表现（21 项）
 python .tools/verify-write-fields.py    # 写作台里作者/隐藏的读写（27 项）
 python .tools/verify-site-and-tags.py   # 写作台的标签筛选 + 站点信息（42 项）
-python .tools/verify-order.py           # 自定义排序：首页顺序 + 写作台排序 + 拖拽（37 项）
+python .tools/verify-order.py           # 排序（触屏）：首页顺序 + 排序模式 + 拖拽（41 项）
+python .tools/verify-order-desktop.py   # 排序（电脑）：收起按钮 + 真鼠标拖拽（14 项）
 python .tools/verify-mobile-padding.py  # 手机端正文左右留白够不够（12 项）
 python .tools/verify-looks.py           # 头像/图标/og 缩略图有没有真的加载出来（7 项）
 python .tools/verify-local-file.py      # 本地双击打开 write.html 能不能用（两段）

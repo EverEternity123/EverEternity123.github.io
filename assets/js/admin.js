@@ -393,6 +393,10 @@
       '<span class="repo-meta">' + esc(CFG.branch || 'main') +
       (state.user ? ' · 已连接 ' + esc(state.user) : '') + '</span>';
 
+    // 排序模式在 body 上挂个类：CSS 靠它把「电脑端整行可拖」的光标和
+    // 「收起 ↑↓ 按钮」两条规则限定在排序模式内（平时列表也要能正常选中文字）
+    document.body.classList.toggle('ee-sorting', sorting);
+
     var sortBar = $('#sort-bar');
     if (sortBar) sortBar.hidden = !sorting;
     var btnSort = $('#btn-sort');
@@ -519,6 +523,62 @@
     for (var i = 0; i < rows.length; i++) rows[i].textContent = String(i + 1);
   }
 
+  /* 只刷新首末行的按钮禁用状态。
+     拖拽结束走这里，而不是 renderList() —— 整表重画会闪一下，
+     还会把刚做完的位移动画一起打断。 */
+  function refreshMoveButtons() {
+    var rows = $('#list').querySelectorAll('li');
+    for (var i = 0; i < rows.length; i++) {
+      var up = rows[i].querySelector('button[data-act="up"]');
+      var top = rows[i].querySelector('button[data-act="top"]');
+      var down = rows[i].querySelector('button[data-act="down"]');
+      var first = i === 0, last = i === rows.length - 1;
+      if (up) up.disabled = first;
+      if (top) top.disabled = first;
+      if (down) down.disabled = last;
+    }
+  }
+
+  /* 松手后在被拖的那一行上打一下高亮，确认「就落在这儿」 */
+  function settleRow(li) {
+    if (!li || !li.classList) return;
+    li.classList.add('settled');
+    setTimeout(function () { li.classList.remove('settled'); }, 460);
+  }
+
+  /* FLIP：先量位置 → 改 DOM → 补一个反向位移再过渡回 0，
+     这样其它行是「滑」到新位置，而不是瞬间跳过去。
+     ⚠️ 量位置用 offsetTop，不用 getBoundingClientRect()：后者把 transform
+     算进去，上一次动画还没跑完时量到的就是中间态，位移量会算错（越拖越飘）。 */
+  function flipReorder(mutate) {
+    var lis = [].slice.call($('#list').querySelectorAll('li'));
+    var tops = [];
+    var i;
+    for (i = 0; i < lis.length; i++) tops.push(lis[i].offsetTop);
+
+    mutate();
+
+    for (i = 0; i < lis.length; i++) {
+      var li = lis[i];
+      if (li === dragState.li) continue;        // 被拖的那行跟手，不参与动画
+      var dy = tops[i] - li.offsetTop;
+      if (!dy) continue;
+      li.style.transition = 'none';
+      li.style.transform = 'translateY(' + dy + 'px)';
+      void li.offsetHeight;                     // 强制回流，让起点真的生效
+      li.style.transition = 'transform .16s cubic-bezier(.2, .7, .3, 1)';
+      li.style.transform = '';
+      clearFlipLater(li);
+    }
+  }
+
+  function clearFlipLater(li) {
+    setTimeout(function () {
+      li.style.transition = '';
+      li.style.transform = '';
+    }, 240);
+  }
+
   /* 指针位置下面是哪一行（被拖的那行 pointer-events:none，所以会被"看穿"） */
   function rowUnder(x, y) {
     var el = document.elementFromPoint(x, y);
@@ -557,14 +617,19 @@
     if (!over) return;
     var r = over.getBoundingClientRect();
     var after = y > r.top + r.height / 2;
-    dragState.li.parentNode.insertBefore(
-      dragState.li, after ? over.nextSibling : over);
+    var ref = after ? over.nextSibling : over;
+    // 落点没变就别碰 DOM：否则每一帧都重排一次，动画会被自己反复打断
+    if (ref === dragState.li || ref === dragState.li.nextSibling) return;
+    flipReorder(function () {
+      dragState.li.parentNode.insertBefore(dragState.li, ref);
+    });
     renumberRows();
   }
 
   function dragEnd() {
     if (!dragState) return;
     var wasActive = dragState.active;
+    var dragged = dragState.li;
     dragCleanup();
     if (!wasActive) return;
 
@@ -583,7 +648,10 @@
     });
 
     state.posts = next;
-    renderList();          // 重画一遍，顺手把按钮的禁用状态算对
+    // ⚠️ 这里**不能** renderList()：整表重画会闪一下，还会把刚做完的位移动画打断。
+    //    序号在拖动过程中已经编好，只需要补一下首末行的按钮禁用状态。
+    refreshMoveButtons();
+    settleRow(dragged);
   }
 
   function dragStart(li, e) {

@@ -526,19 +526,61 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
 }
 .admin-list .ord:active { cursor: grabbing; }
 
-/* 正在被拖的那一行：抬起来一点，并且 pointer-events:none ——
-   这样 elementFromPoint 能"看穿"它，直接命中它下面那一行 */
+/* 正在被拖的那一行：要让人一眼看出「拿起来了」——
+   抬到最上层、套一圈主题色描边、轻微放大、换成不透明的卡片底，
+   并且 pointer-events:none（这样 elementFromPoint 能"看穿"它，
+   直接命中它下面那一行） */
 .admin-list li.dragging {
   pointer-events: none;
-  background: var(--bg-soft);
-  border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+  position: relative;
+  z-index: 5;
+  background: var(--bg-elev);
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--accent), 0 16px 34px rgba(0, 0, 0, .22);
+  transform: scale(1.015);
+  transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
 }
+/* 被拖那行的序号变成主题色小徽章，拖的是哪一条一目了然 */
+.admin-list li.dragging .ord {
+  background: var(--accent);
+  color: var(--bg-elev);
+  border-radius: 6px;
+  padding: 1px 0;
+  font-weight: 700;
+}
+/* 松手落位时闪一下，确认「就放这儿」 */
+.admin-list li.settled { animation: ee-settle .46s ease-out; }
+@keyframes ee-settle {
+  0%   { background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent); }
+  100% { background: transparent;        box-shadow: 0 0 0 2px transparent; }
+}
+
 html.ee-dragging,
 html.ee-dragging body { user-select: none; cursor: grabbing; }
 
 .admin-list .ops .btn-move { padding: 8px 10px; font-size: 15px; line-height: 1; }
 .admin-list .ops .btn-move[data-act="top"] { font-size: 13px; }
+
+/* ---------- 排序模式：电脑端整行拖，触屏按住序号 ---------- */
+/* 默认（触屏）：文案说「按住序号」，↑ ↓ 置顶 按钮留着兜底 */
+.sort-note .hint-fine   { display: none; }
+.sort-note .hint-coarse { display: inline; }
+
+/* 有精确指针（鼠标 / 触控板）= 电脑端：
+   整行都能拖，光标给暗示；把 ↑ ↓ 置顶 收起来，别让按钮抢了拖拽的注意力。
+   ⚠️ 判据是「输入能力」不是屏幕宽度 —— 用宽度判断的话，把窗口拉窄
+   就会把按钮藏掉，那种情况下反而没法操作了。 */
+@media (hover: hover) and (pointer: fine) {
+  .sort-note .hint-fine   { display: inline; }
+  .sort-note .hint-coarse { display: none; }
+  body.ee-sorting .admin-list .ops .btn-move { display: none; }
+  body.ee-sorting .admin-list li {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body.ee-sorting .admin-list li.dragging { cursor: grabbing; }
+}
 
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
