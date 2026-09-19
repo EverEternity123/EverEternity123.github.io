@@ -417,6 +417,17 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   border-radius: 999px;
   font-size: 12px;
 }
+/* 「原创」标记：站主自己写的文章，卡片上不用点进去就能看见。
+   用实心主题色，好跟旁边那些淡底的标签区分开 —— 它是个「印记」不是分类 */
+.post-meta .badge-original {
+  color: var(--bg-elev);
+  background: var(--accent);
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
 
 .empty {
   padding: 56px 20px;

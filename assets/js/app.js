@@ -34,6 +34,11 @@
 
   function authorOf(p) { return p.author || DEFAULT_AUTHOR; }
 
+  /* 站主自己写的文章 → 标「原创」，让人在点进去之前就能分辨。
+     判据跟「卡片上要不要显示作者」是同一件事的两面：
+     作者栏没写、或写的就是默认署名，都算站主自己写的。 */
+  function isOriginal(p) { return !p.author || p.author === DEFAULT_AUTHOR; }
+
   function fmtDate(iso, style) {
     var p = String(iso || '').split('-');
     if (p.length < 3) return iso || '';
@@ -128,6 +133,11 @@
       ? '<span class="dot"></span><span class="byline">' + MD.escape(p.author) + '</span>'
       : '';
 
+    // 站主自己写的标「原创」—— 和上面互斥，所以卡片上不会同时出现作者名和这个标
+    var original = isOriginal(p)
+      ? '<span class="dot"></span><span class="badge-original">原创</span>'
+      : '';
+
     return '' +
       '<a class="post-card reveal" href="' + postUrl(p.id) + '">' +
         '<h3>' + MD.escape(p.title) + '</h3>' +
@@ -136,6 +146,7 @@
           '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
           '<span class="dot"></span>' +
           '<span>' + MD.readingTime(p.content) + ' 分钟</span>' +
+          original +
           author +
           (tags ? '<span class="dot"></span>' + tags : '') +
         '</div>' +
@@ -276,6 +287,10 @@
     $('#post-date').textContent = fmtDate(post.date, 'long');
     $('#post-author').textContent = authorOf(post);
     $('#post-time').textContent = MD.readingTime(post.content) + ' 分钟';
+
+    // 自己写的标「原创」，和列表卡片上是同一个判据
+    var originalEl = $('#post-original');
+    if (originalEl) originalEl.hidden = !isOriginal(post);
 
     // 隐藏的文章：只在直接打开时提醒一下，列表里根本看不到
     if (isHidden(post) && wrap) {

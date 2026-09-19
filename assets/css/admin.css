@@ -414,6 +414,15 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   color: var(--text-3);
 }
 
+/* 「原创」：作者栏空着、或写的就是默认署名 = 站主自己写的。
+   用实心主题色，跟前台卡片上那个标记长得一样 */
+.pill-original {
+  background: var(--accent);
+  color: var(--bg-elev);
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+
 /* 被隐藏的文章在列表里淡一点，一眼能区分 */
 .admin-list li.is-hidden .ttl { color: var(--text-2); }
 
@@ -478,16 +487,16 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   color: var(--accent);
 }
 
-/* ---------- 自定义排序 ---------- */
+/* ---------- 批量编辑（排序 + 改标签 + 隐藏） ---------- */
 
-/* 顶栏那个「排序」按钮：进入排序模式时点亮，一眼能看出现在是哪种模式 */
+/* 顶栏那个「批量编辑」按钮：进入时点亮，一眼能看出现在是哪种模式 */
 .btn.on {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
 }
 
-.sort-bar {
+.batch-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -499,17 +508,23 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   border-radius: 12px;
   background: var(--bg-soft);
 }
-.sort-note {
+.batch-note {
   flex: 1 1 240px;
   font-size: 12.5px;
   line-height: 1.75;
   color: var(--text-2);
 }
-.sort-note b { color: var(--text); font-weight: 500; }
-.sort-tip { display: block; color: var(--text-3); }
-.sort-ops { display: flex; gap: 8px; flex: none; }
+.batch-note b { color: var(--text); font-weight: 500; }
+.batch-tip { display: block; color: var(--text-3); }
+.batch-ops { display: flex; gap: 8px; flex: none; }
 
-/* 排序模式下每行前面那个序号，方便对着数 */
+/* 批量编辑时把跟这件事无关的东西收起来（顶栏那句说明、仓库地址条）。
+   手机上每一行本来就高，这些占的是「一屏能看几篇」的位置 */
+body.ee-batch .admin-hint,
+body.ee-batch .repo-strip { display: none; }
+
+/* 批量编辑下每行前面那个序号。它同时是**拖拽把手**：
+   touch-action:none 让手指按住它时不会变成滚页面（否则拖不动） */
 .admin-list .ord {
   flex: none;
   min-width: 24px;
@@ -517,8 +532,6 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   text-align: center;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
-  /* 排序模式下这个序号同时是拖拽把手：
-     touch-action:none 让手指按住它时不会变成滚页面（否则拖不动） */
   touch-action: none;
   cursor: grab;
   user-select: none;
@@ -561,26 +574,159 @@ html.ee-dragging body { user-select: none; cursor: grabbing; }
 .admin-list .ops .btn-move { padding: 8px 10px; font-size: 15px; line-height: 1; }
 .admin-list .ops .btn-move[data-act="top"] { font-size: 13px; }
 
-/* ---------- 排序模式：电脑端整行拖，触屏按住序号 ---------- */
+/* ---------- 批量编辑：行内的标签与公开状态 ---------- */
+
+/* 标题和「隐藏 / 已隐藏」同一行，标题短的时候按钮不会跑到天边 */
+.admin-list .ttl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.admin-list .ttl-row .ttl { flex: 1; min-width: 0; margin-bottom: 4px; }
+
+.btn-toggle {
+  flex: none;
+  padding: 4px 11px;
+  font-size: 12px;
+  border-radius: 999px;
+  color: var(--text-3);
+}
+.btn-toggle.on {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, .35);
+  background: rgba(192, 57, 43, .09);
+}
+html[data-theme="dark"] .btn-toggle.on {
+  color: #ef7a6a;
+  border-color: rgba(239, 122, 106, .4);
+  background: rgba(239, 122, 106, .13);
+}
+
+/* 一行标签：可删的小胶囊 + 「＋标签」输入框 */
+.admin-list .row-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* 位移按钮挤在「日期 · 作者」那一行的右端 —— 手机上每一行的高度直接决定
+   「一屏能看几篇」，多占一整行就少看一篇。放不下时它自己会换行，不影响 */
+.admin-list .meta .ops {
+  margin-left: auto;
+  align-items: center;
+}
+.admin-list .meta .ops .btn {
+  padding: 2px 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.admin-list .meta .ops .btn-move[data-act="top"] { font-size: 12px; }
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.chip-x {
+  flex: none;
+  width: 18px; height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  opacity: .6;
+  transition: opacity .15s, background .15s;
+}
+.chip-x:hover { opacity: 1; background: rgba(0, 0, 0, .09); }
+html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
+
+/* 行内加标签的输入框：全局那条 `.admin input[type="text"]` 太胖
+   （padding 13px、宽度 100%），这里压成跟胶囊一样高。
+   ⚠️ 选择器必须写成 `input.row-tag-input`：只写 `.admin-list .row-tag-input`
+     是 (0,2,0)，拼不过上面那条 `.admin input[type="text"]` 的 (0,2,1) ——
+     输入框会被撑成整行宽，一行白白高出 20 多像素（踩过）。
+   ⚠️ 字号不能小于 16px，否则 iOS 一点就放大整页 */
+.admin-list input.row-tag-input {
+  width: 96px;
+  padding: 3px 10px;
+  font-size: 16px;
+  line-height: 1.5;
+  border-radius: 999px;
+  border-style: dashed;
+}
+.admin-list input.row-tag-input:focus { width: 140px; }
+
+/* ---------- 批量编辑：电脑端整行拖，触屏按住序号 ---------- */
 /* 默认（触屏）：文案说「按住序号」，↑ ↓ 置顶 按钮留着兜底 */
-.sort-note .hint-fine   { display: none; }
-.sort-note .hint-coarse { display: inline; }
+.batch-note .hint-fine   { display: none; }
+.batch-note .hint-coarse { display: inline; }
 
 /* 有精确指针（鼠标 / 触控板）= 电脑端：
    整行都能拖，光标给暗示；把 ↑ ↓ 置顶 收起来，别让按钮抢了拖拽的注意力。
    ⚠️ 判据是「输入能力」不是屏幕宽度 —— 用宽度判断的话，把窗口拉窄
    就会把按钮藏掉，那种情况下反而没法操作了。 */
 @media (hover: hover) and (pointer: fine) {
-  .sort-note .hint-fine   { display: inline; }
-  .sort-note .hint-coarse { display: none; }
-  body.ee-sorting .admin-list .ops .btn-move { display: none; }
-  body.ee-sorting .admin-list li {
+  .batch-note .hint-fine   { display: inline; }
+  .batch-note .hint-coarse { display: none; }
+  body.ee-batch .admin-list .ops .btn-move { display: none; }
+  body.ee-batch .admin-list li {
     cursor: grab;
     user-select: none;
     -webkit-user-select: none;
   }
-  body.ee-sorting .admin-list li.dragging { cursor: grabbing; }
+  body.ee-batch .admin-list li.dragging { cursor: grabbing; }
 }
+
+/* ---------- 标签总览（全局改名 / 合并 / 移除） ---------- */
+.tag-edit-list { list-style: none; margin: 0 0 24px; padding: 0; }
+
+.tag-edit-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tag-from {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-count {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.tag-edit-list input.tag-to {
+  flex: 0 1 180px;
+  width: 180px;
+  padding: 9px 12px;
+  font-size: 16px;
+}
+.tag-edit-list input.tag-to::placeholder { color: var(--text-3); }
 
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
@@ -597,8 +743,12 @@ html.ee-dragging body { user-select: none; cursor: grabbing; }
   }
   #view-list .admin-bar .group { justify-content: space-between; }
 
-  /* 排序条：窄屏上按钮单独占一行，别把说明文字挤成一列字 */
-  .sort-bar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .sort-ops { justify-content: flex-end; }
+  /* 批量编辑条：窄屏上按钮单独占一行，别把说明文字挤成一列字 */
+  .batch-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .batch-ops { justify-content: flex-end; }
   .admin-list .ops .btn-move { padding: 8px 9px; font-size: 14px; }
+
+  /* 标签总览：标签名和输入框各占一行，输入框吃满宽度（手指好点） */
+  .tag-edit-list li { flex-direction: column; align-items: stretch; gap: 6px; }
+  .tag-edit-list input.tag-to { flex: 1 1 auto; width: 100%; }
 }

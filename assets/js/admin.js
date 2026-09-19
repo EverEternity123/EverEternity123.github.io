@@ -13,6 +13,8 @@
   var API = 'https://api.github.com';
   var TOKEN_KEY = 'ee-gh-token';
   var DRAFT_PREFIX = 'ee-draft:';
+  var MAX_TAG_LEN = 24;      // 单个标签最长几个字（编辑页、批量编辑、标签总览共用）
+  var MAX_TAGS = 8;          // 一篇文章最多几个标签
 
   var $ = function (s) { return document.querySelector(s); };
 
@@ -29,8 +31,10 @@
     siteSha: null,    // site.json 的 blob sha，提交时必须带上
     order: { ids: [] }, // data/order.json 的内容：自定义顺序
     orderSha: null,     // order.json 的 blob sha，提交时必须带上
-    sorting: false,     // 是否处于「排序」模式
-    sortBaseline: null  // 进入排序模式那一刻的顺序，用来判断有没有改过
+    batch: false,       // 是否处于「批量编辑」模式（排序 + 改标签 + 隐藏）
+    batchBaseline: null,// 进入那一刻的顺序快照，用来判断顺序有没有动过
+    batchSnapshot: null,// 进入那一刻的文章深拷贝，取消时用它整体回滚
+    tagEdit: null       // 标签总览那一屏的工作副本 [{from, to}]
   };
 
   /* ======================================================================
@@ -54,7 +58,7 @@
   }
 
   function show(view) {
-    ['connect', 'list', 'edit', 'site'].forEach(function (v) {
+    ['connect', 'list', 'edit', 'site', 'tags'].forEach(function (v) {
       $('#view-' + v).hidden = (v !== view);
     });
     window.scrollTo(0, 0);
@@ -187,12 +191,10 @@
     return state.posts.map(function (p) { return p.id; });
   }
 
-  /* 排序模式下：跟进入时的顺序比，有没有动过 */
-  function sortDirty() {
-    var a = currentIds(), b = state.sortBaseline || [];
-    if (a.length !== b.length) return true;
-    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
-    return false;
+  /* 批量编辑模式下：跟进入时的快照比，有没有动过（顺序 / 标签 / 隐藏都算） */
+  function batchDirty() {
+    var c = batchChanges();
+    return c.order || c.tags.length > 0 || c.hidden.length > 0;
   }
 
   function loadPosts() {
@@ -310,6 +312,12 @@
     state.filterTag = '';
     state.site = null;
     state.siteSha = null;
+    state.order = { ids: [] };
+    state.orderSha = null;
+    state.batch = false;
+    state.batchBaseline = null;
+    state.batchSnapshot = null;
+    state.tagEdit = null;
     $('#f-token').value = '';
     renderConnect();
     show('connect');
@@ -366,13 +374,13 @@
 
   function renderList() {
     var ul = $('#list');
-    var sorting = state.sorting === true;
+    var batch = state.batch === true;
 
-    // 排序模式下强制看全部：在筛选后的列表里挪位置，很容易挪到自己看不见的地方
-    if (sorting) state.filterTag = '';
+    // 批量编辑下强制看全部：在筛选后的列表里挪位置，很容易挪到自己看不见的地方
+    if (batch) state.filterTag = '';
     renderTagbar();
     var tagbarEl = $('#admin-tagbar');
-    if (tagbarEl && sorting) tagbarEl.hidden = true;
+    if (tagbarEl && batch) tagbarEl.hidden = true;
 
     var shown = visiblePosts();
     $('#count-pill').textContent = state.filterTag
@@ -381,8 +389,8 @@
 
     var empty = $('#list-empty');
     empty.hidden = shown.length > 0;
-    empty.textContent = sorting
-      ? '还没有文章，没什么可排的。'
+    empty.textContent = batch
+      ? '还没有文章，没什么可编辑的。'
       : (state.filterTag
           ? '没有「' + state.filterTag + '」标签的文章。'
           : '还没有文章，点右上角开始写第一篇。');
@@ -393,80 +401,202 @@
       '<span class="repo-meta">' + esc(CFG.branch || 'main') +
       (state.user ? ' · 已连接 ' + esc(state.user) : '') + '</span>';
 
-    // 排序模式在 body 上挂个类：CSS 靠它把「电脑端整行可拖」的光标和
-    // 「收起 ↑↓ 按钮」两条规则限定在排序模式内（平时列表也要能正常选中文字）
-    document.body.classList.toggle('ee-sorting', sorting);
+    // 批量编辑在 body 上挂个类：CSS 靠它把「电脑端整行可拖」的光标、
+    // 「收起 ↑↓ 按钮」这些规则限定在批量编辑模式内（平时列表要能正常选中文字）
+    document.body.classList.toggle('ee-batch', batch);
 
-    var sortBar = $('#sort-bar');
-    if (sortBar) sortBar.hidden = !sorting;
-    var btnSort = $('#btn-sort');
-    if (btnSort) {
-      btnSort.textContent = sorting ? '排序中' : '排序';
-      btnSort.classList.toggle('on', sorting);
+    var batchBar = $('#batch-bar');
+    if (batchBar) batchBar.hidden = !batch;
+    var btnBatch = $('#btn-batch');
+    if (btnBatch) {
+      btnBatch.textContent = batch ? '批量编辑中' : '批量编辑';
+      btnBatch.classList.toggle('on', batch);
     }
 
     ul.innerHTML = shown.map(function (p, i) {
-      var tags = (p.tags || []).map(function (t) {
-        return '<span class="pill">' + esc(t) + '</span>';
-      }).join(' ');
+      var isHidden = p.hidden === true;
+      // 作者栏空着 = 用默认署名 = 站主自己写的 → 标「原创」，跟前台卡片一致
       var author = p.author
         ? '<span class="pill pill-author">' + esc(p.author) + '</span>'
-        : '';
-      var hidden = p.hidden === true
-        ? '<span class="pill pill-hidden">已隐藏</span>'
-        : '';
+        : '<span class="pill pill-original">原创</span>';
+      var hiddenPill = isHidden ? '<span class="pill pill-hidden">已隐藏</span>' : '';
+      var metaStart = '<div class="meta"><span>' + fmtDate(p.date) + '</span>' + hiddenPill;
 
-      // 排序模式下把「编辑 / 删除」换成位移按钮，免得一行挤四个按钮
-      var ops = sorting
-        ? '<button class="btn btn-move" data-act="top"' +
-            (i === 0 ? ' disabled' : '') + ' title="移到最前">置顶</button>' +
-          '<button class="btn btn-move" data-act="up"' +
-            (i === 0 ? ' disabled' : '') + ' title="上移一位">↑</button>' +
-          '<button class="btn btn-move" data-act="down"' +
-            (i === shown.length - 1 ? ' disabled' : '') + ' title="下移一位">↓</button>'
-        : '<button class="btn" data-act="edit">编辑</button>' +
-          '<button class="btn btn-danger" data-act="del">删除</button>';
+      var inner;
+      if (!batch) {
+        var tags = (p.tags || []).map(function (t) {
+          return '<span class="pill">' + esc(t) + '</span>';
+        }).join(' ');
+        inner =
+          '<div class="info">' +
+            '<div class="ttl">' + esc(p.title) + '</div>' +
+            metaStart + author + tags + '</div>' +
+          '</div>' +
+          '<div class="ops">' +
+            '<button class="btn" data-act="edit">编辑</button>' +
+            '<button class="btn btn-danger" data-act="del">删除</button>' +
+          '</div>';
+      } else {
+        // 标签做成可删的小胶囊；行内再给一个输入框，回车就加上。
+        // 布局压成三行：标题 + 隐藏按钮 / 日期·作者 + 位移按钮 / 标签 + ＋标签。
+        // 手机上每一行的高度直接决定「一屏能看几篇」，多一行就少一篇。
+        var chips = (p.tags || []).map(function (t) {
+          return '<span class="tag-chip">' + esc(t) +
+            '<button class="chip-x" data-act="rmtag" data-tag="' + esc(t) + '"' +
+            ' title="删掉这个标签" aria-label="删掉标签 ' + esc(t) + '">×</button>' +
+            '</span>';
+        }).join('');
+        inner =
+          '<div class="info">' +
+            '<div class="ttl-row">' +
+              '<div class="ttl">' + esc(p.title) + '</div>' +
+              '<button class="btn btn-toggle' + (isHidden ? ' on' : '') + '"' +
+                ' data-act="toggle-hidden" title="切换这篇是公开还是隐藏">' +
+                (isHidden ? '已隐藏' : '隐藏') + '</button>' +
+            '</div>' +
+            metaStart + author +
+              '<div class="ops">' +
+                '<button class="btn btn-move" data-act="top"' +
+                  (i === 0 ? ' disabled' : '') + ' title="移到最前">置顶</button>' +
+                '<button class="btn btn-move" data-act="up"' +
+                  (i === 0 ? ' disabled' : '') + ' title="上移一位">↑</button>' +
+                '<button class="btn btn-move" data-act="down"' +
+                  (i === shown.length - 1 ? ' disabled' : '') + ' title="下移一位">↓</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="row-tags">' + chips +
+              '<input class="row-tag-input" type="text" maxlength="' + MAX_TAG_LEN + '"' +
+              ' placeholder="＋ 标签" aria-label="给这篇加标签">' +
+            '</div>' +
+          '</div>';
+      }
 
       return '' +
         '<li data-id="' + esc(p.id) + '"' +
-            (p.hidden === true ? ' class="is-hidden"' : '') + '>' +
-          // 排序模式下这个序号同时是**拖拽把手**（CSS 里 touch-action:none，
+            (isHidden ? ' class="is-hidden"' : '') + '>' +
+          // 批量编辑下这个序号同时是**拖拽把手**（CSS 里 touch-action:none，
           // 手指按住它才不会变成滚页面；鼠标则整行都能拖）
-          (sorting
-            ? '<span class="ord" title="按住拖动" aria-label="拖动排序">'
-              + (i + 1) + '</span>'
+          (batch
+            ? '<span class="ord" title="按住拖动" aria-label="拖动排序">' +
+              (i + 1) + '</span>'
             : '') +
-          '<div class="info">' +
-            '<div class="ttl">' + esc(p.title) + '</div>' +
-            '<div class="meta"><span>' + fmtDate(p.date) + '</span>' +
-              hidden + author + tags + '</div>' +
-          '</div>' +
-          '<div class="ops">' + ops + '</div>' +
+          inner +
         '</li>';
     }).join('');
+
+    renderBatchSummary();
+  }
+
+  /* ---------- 批量编辑：待保存的改动 ---------- */
+
+  /* 跟进入批量编辑时的快照比，看动了什么。顺序、标签、公开状态三类 */
+  function batchChanges() {
+    var snap = state.batchSnapshot;
+    if (!snap) return { order: false, tags: [], hidden: [] };
+
+    var before = {};
+    snap.forEach(function (p) { before[p.id] = p; });
+    var beforeOrder = snap.map(function (p) { return p.id; });
+
+    var tags = [], hidden = [];
+    state.posts.forEach(function (p) {
+      var was = before[p.id];
+      if (!was) return;                       // 期间新增的文章，不算改动
+      if ((p.tags || []).join('\u0000') !== (was.tags || []).join('\u0000')) tags.push(p.id);
+      if ((p.hidden === true) !== (was.hidden === true)) hidden.push(p.id);
+    });
+
+    return {
+      order: currentIds().join('\u0000') !== beforeOrder.join('\u0000'),
+      tags: tags,
+      hidden: hidden
+    };
+  }
+
+  function renderBatchSummary() {
+    var box = $('#batch-summary');
+    if (!box) return;
+    if (state.batch !== true) { box.hidden = true; return; }
+
+    var c = batchChanges();
+    var parts = [];
+    if (c.order) parts.push('顺序有调整');
+    if (c.tags.length) parts.push(c.tags.length + ' 篇的标签改了');
+    if (c.hidden.length) parts.push(c.hidden.length + ' 篇的公开状态改了');
+
+    box.hidden = !parts.length;
+    box.textContent = parts.length ? '待保存：' + parts.join(' · ') : '';
   }
 
   /* ======================================================================
-     自定义排序
+     批量编辑：排序 + 改标签 + 隐藏，做完一次提交
+     ----------------------------------------------------------------------
+     三件事都**直接改 state.posts**（所见即所得），进入时存一份深拷贝，
+     取消时整体回滚 —— 标签和隐藏状态是改在文章对象上的，
+     光靠「重新排一次序」回不去。
      ====================================================================== */
 
-  function enterSort() {
+  function enterBatch() {
     if (!state.posts.length) {
-      toast('还没有文章，不用排序', true);
+      toast('还没有文章，没什么可编辑的', true);
       return;
     }
-    state.sorting = true;
+    state.batch = true;
     state.filterTag = '';
-    state.sortBaseline = currentIds();   // 用来判断「有没有动过」
+    state.batchBaseline = currentIds();                             // 顺序基线
+    state.batchSnapshot = JSON.parse(JSON.stringify(state.posts));  // 取消时回滚用
     renderList();
   }
 
-  function cancelSort() {
-    if (sortDirty() && !window.confirm('顺序改过了，确定放弃这些调整吗？')) return;
-    state.sorting = false;
-    state.sortBaseline = null;
-    state.posts = applyOrder(state.posts);  // 丢掉未保存的调整，回到线上那份顺序
+  function cancelBatch() {
+    var c = batchChanges();
+    var n = (c.order ? 1 : 0) + c.tags.length + c.hidden.length;
+    if (n && !window.confirm('有 ' + n + ' 处改动还没保存，确定放弃吗？')) return;
+    state.batch = false;
+    state.batchBaseline = null;
+    state.posts = applyOrder(state.batchSnapshot || state.posts);
+    state.batchSnapshot = null;
     renderList();
+  }
+
+  /* 切换一篇的公开 / 隐藏 */
+  function toggleHidden(id) {
+    var post = state.posts.filter(function (p) { return p.id === id; })[0];
+    if (!post) return;
+    if (post.hidden === true) delete post.hidden;   // 假值不落盘，跟编辑页保持一致
+    else post.hidden = true;
+    renderList();
+  }
+
+  /* 从一篇上删掉一个标签 */
+  function removeTag(id, tag) {
+    var post = state.posts.filter(function (p) { return p.id === id; })[0];
+    if (!post || !post.tags) return;
+    var next = post.tags.filter(function (t) { return t !== tag; });
+    if (next.length === post.tags.length) return;
+    post.tags = next;
+    renderList();
+  }
+
+  /* 给一篇加一个标签。上限 8 个，跟编辑页那个输入框保持一致 */
+  function addTag(id, raw) {
+    var tag = String(raw || '').trim().replace(/^#/, '');
+    if (!tag) return false;
+    if (tag.length > MAX_TAG_LEN) {
+      toast('标签太长了（最多 ' + MAX_TAG_LEN + ' 个字）', true);
+      return false;
+    }
+
+    var post = state.posts.filter(function (p) { return p.id === id; })[0];
+    if (!post) return false;
+
+    var tags = post.tags || [];
+    if (tags.indexOf(tag) !== -1) { toast('这篇已经有「' + tag + '」了'); return false; }
+    if (tags.length >= MAX_TAGS) { toast('一篇最多 ' + MAX_TAGS + ' 个标签', true); return false; }
+
+    post.tags = tags.concat([tag]);
+    renderList();
+    return true;
   }
 
   /* delta：-1 上移一位 / 1 下移一位 / 'top' 移到最前 */
@@ -658,7 +788,9 @@
     var isTouch = e.pointerType === 'touch';
     // 手指只认把手（序号），否则一按住就拖，页面没法滚了
     if (isTouch && !(e.target.closest && e.target.closest('.ord'))) return;
-    if (e.target.closest && e.target.closest('button')) return;   // 点按钮不算拖
+    // 点按钮 / 想打字不算拖。⚠️ input 也要排除：批量编辑下整行可拖，
+    //    被拖的行会拿到 pointer-events:none，点进输入框就永远聚焦不上。
+    if (e.target.closest && e.target.closest('button, input, textarea, select, a')) return;
 
     dragState = {
       li: li, y0: e.clientY, x0: e.clientX, y: e.clientY,
@@ -690,7 +822,7 @@
 
   function initDrag() {
     $('#list').addEventListener('pointerdown', function (e) {
-      if (state.sorting !== true || dragState) return;
+      if (state.batch !== true || dragState) return;
       if (e.button && e.button !== 0) return;              // 只认左键
       var li = e.target.closest && e.target.closest('#list li');
       if (!li) return;
@@ -700,39 +832,203 @@
     });
   }
 
-  function saveSort() {
+  /* 保存批量编辑：标签 / 公开状态进 posts.json，顺序进 order.json。
+     Contents API 一次只能写一个文件，所以两处都有改动时就是两次提交；
+     任一步失败都重新拉一遍，别让界面跟远端不一致。 */
+  function saveBatch() {
+    var c = batchChanges();
+    if (!c.order && !c.tags.length && !c.hidden.length) {
+      toast('还没有任何改动');
+      return;
+    }
+
+    var parts = [];
+    if (c.order) parts.push('顺序');
+    if (c.tags.length) parts.push('标签');
+    if (c.hidden.length) parts.push('公开状态');
+    var message = '批量编辑：' + parts.join(' + ');
+
+    // 顺序先记进 state.order：commit() 里会按它重排一次，
+    // 不先写进去的话，刚拖好的顺序会被旧 ids 排回原样。
     var ids = currentIds();
-    var json = JSON.stringify({ ids: ids }, null, 2) + '\n';
+    state.order = { ids: ids };
+
+    var jobs = [];
+    if (c.tags.length || c.hidden.length) jobs.push(function () { return commit(message); });
+    if (c.order) jobs.push(function () { return commitOrder(message, ids); });
+
+    var btn = $('#btn-batch-save');
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+
+    return jobs.reduce(function (chain, job) {
+      return chain.then(function () { return job(); });
+    }, Promise.resolve())
+      .then(function () {
+        state.batch = false;
+        state.batchBaseline = null;
+        state.batchSnapshot = null;
+        renderList();
+        toast('已保存 ' + parts.join(' + ') + '，网站约 1 分钟后更新');
+      })
+      .catch(function (e) {
+        // 只成功了一半（比如顺序写进去了、标签没有）：拉回远端的真实状态，
+        // 用户再点一次「保存全部改动」就能把剩下的补上
+        return loadPosts().catch(function () {}).then(function () {
+          renderList();
+          toast(e.message, true);
+        });
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = '保存全部改动';
+      });
+  }
+
+  /* 只写 data/order.json */
+  function commitOrder(message, ids) {
     var body = {
-      message: '调整文章顺序',
-      content: b64encode(json),
+      message: message,
+      content: b64encode(JSON.stringify({ ids: ids }, null, 2) + '\n'),
       branch: CFG.branch || 'main'
     };
     if (state.orderSha) body.sha = state.orderSha;
 
-    var btn = $('#btn-sort-save');
-    btn.disabled = true;
-    btn.textContent = '保存中…';
-
     return gh(contentsPathOf(orderPath()), { method: 'PUT', body: body })
       .then(function (data) {
         if (data && data.content && data.content.sha) state.orderSha = data.content.sha;
-        state.order = { ids: ids };
-        state.sorting = false;
-        state.sortBaseline = null;
-        renderList();
-        toast('顺序已保存，约 1 分钟后线上生效');
-      })
-      .catch(function (e) {
-        toast(e.message, true);
-      })
-      .then(function () {
-        btn.disabled = false;
-        btn.textContent = '保存排序';
       });
   }
 
+  /* ======================================================================
+     标签总览：全局改名 / 合并 / 移除
+     ----------------------------------------------------------------------
+     一篇一篇地改标签，改到第十篇就会开始漏。这里按「标签」列出来，
+     改一次就作用到所有文章（含未公开的）。
+     结果先落在 state.posts 上，回列表点「保存全部改动」才真正提交。
+     ====================================================================== */
+
+  function openTagOverview() {
+    state.tagEdit = tagStats(state.posts).list.map(function (t) {
+      return { from: t, to: t };
+    });
+    renderTagEditList();
+    show('tags');
+  }
+
+  function renderTagEditList() {
+    var rows = state.tagEdit || [];
+    var count = tagStats(state.posts).count;
+
+    $('#tags-empty').hidden = rows.length > 0;
+    $('#tag-edit-list').innerHTML = rows.map(function (r, i) {
+      return '<li data-i="' + i + '">' +
+        '<span class="tag-from">' + esc(r.from) +
+          '<span class="tag-count">' + (count[r.from] || 0) + ' 篇</span></span>' +
+        '<input class="tag-to" type="text" maxlength="' + MAX_TAG_LEN + '"' +
+          ' value="' + esc(r.to) + '" placeholder="留空 = 移除"' +
+          ' aria-label="把标签 ' + esc(r.from) + ' 改成">' +
+        '</li>';
+    }).join('');
+
+    renderTagsSummary();
+  }
+
+  /* 读一遍输入框（还没点「应用到列表」） */
+  function readTagEdit() {
+    var inputs = $('#tag-edit-list').querySelectorAll('input.tag-to');
+    var out = [];
+    for (var i = 0; i < inputs.length; i++) {
+      out.push({
+        from: (state.tagEdit && state.tagEdit[i] ? state.tagEdit[i].from : ''),
+        to: inputs[i].value.trim().replace(/^#/, '')
+      });
+    }
+    return out;
+  }
+
+  function tagsDirty() {
+    return readTagEdit().some(function (r) { return r.to !== r.from; });
+  }
+
+  function renderTagsSummary() {
+    var box = $('#tags-summary');
+    if (!box) return;
+
+    var changed = readTagEdit().filter(function (r) { return r.to !== r.from; });
+    if (!changed.length) { box.hidden = true; box.textContent = ''; return; }
+
+    var names = changed.slice(0, 3).map(function (r) {
+      return r.to ? ('「' + r.from + '」→「' + r.to + '」') : ('移除「' + r.from + '」');
+    });
+    if (changed.length > 3) names.push('等 ' + changed.length + ' 个');
+
+    box.hidden = false;
+    box.textContent = '待应用：' + names.join('，') + '。回到列表点「保存全部改动」才提交。';
+  }
+
+  /* 一次性作用到所有文章。⚠️ 必须同时改，不能一个一个串着改 ——
+     否则「A→B、B→C」会连带变成 A→C。 */
+  function applyTagOverview() {
+    var rows = readTagEdit();
+    var map = {};
+    var changed = 0;
+    var i;
+
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.to.length > MAX_TAG_LEN) {
+        toast('「' + r.to + '」太长了（最多 ' + MAX_TAG_LEN + ' 个字）', true);
+        return;
+      }
+      if (r.to === r.from) continue;
+      map[r.from] = r.to;                       // '' = 从所有文章上移除
+      changed++;
+    }
+
+    if (!changed) { toast('标签没有改动'); return; }
+
+    var hit = 0;
+    state.posts.forEach(function (p) {
+      var tags = p.tags || [];
+      var next = [], seen = Object.create(null);
+      var touched = false;
+
+      tags.forEach(function (t) {
+        var mapped = Object.prototype.hasOwnProperty.call(map, t) ? map[t] : t;
+        if (mapped !== t) touched = true;
+        if (!mapped) return;                    // 被移除
+        if (seen[mapped]) return;               // 合并后去掉重复
+        seen[mapped] = true;
+        next.push(mapped);
+      });
+
+      if (!touched) return;
+      hit++;
+      p.tags = next;                            // 一个不剩也留空数组，字段顺序不变
+    });
+
+    state.tagEdit = null;
+    renderList();
+    show('list');
+    toast('已改 ' + hit + ' 篇的标签，别忘了点「保存全部改动」');
+  }
+
+  function backFromTags() {
+    if (tagsDirty() && !window.confirm('标签总览里有改动还没应用，确定放弃吗？')) return;
+    state.tagEdit = null;
+    renderList();
+    show('list');
+  }
+
+  /* 批量编辑有没保存的改动时，离开列表页之前先问一声 */
+  function guardBatch() {
+    if (state.batch !== true || !batchDirty()) return true;
+    return window.confirm('批量编辑有改动还没保存，确定离开吗？');
+  }
+
   function refresh() {
+    if (!guardBatch()) return;
     var btn = $('#btn-refresh');
     btn.disabled = true;
     btn.textContent = '刷新中…';
@@ -809,7 +1105,7 @@
       title: $('#f-title').value.trim(),
       date: $('#f-date').value || todayISO(),
       tags: $('#f-tags').value.split(/[,，]/).map(function (t) { return t.trim(); })
-              .filter(Boolean).slice(0, 8),
+              .filter(Boolean).slice(0, MAX_TAGS),
       lede: $('#f-lede').value.trim(),
       content: $('#f-content').value,
       author: $('#f-author').value.trim(),
@@ -1184,7 +1480,10 @@
       if (e.key === 'Enter') { e.preventDefault(); $('#btn-connect').click(); }
     });
 
-    $('#btn-new').addEventListener('click', function () { openEditor(null); });
+    $('#btn-new').addEventListener('click', function () {
+      if (!guardBatch()) return;
+      openEditor(null);
+    });
     $('#btn-back').addEventListener('click', backToList);
     $('#btn-save').addEventListener('click', doSave);
     $('#btn-preview').addEventListener('click', togglePreview);
@@ -1198,6 +1497,7 @@
     $('#btn-site-preview').addEventListener('click', toggleSitePreview);
 
     $('#btn-disconnect').addEventListener('click', function () {
+      if (!guardBatch()) return;
       if (!confirm('断开写作台？\n\n会清掉这台设备上记住的令牌，下次要重新贴一次。\n' +
                    '（文章不受影响）')) return;
       disconnect();
@@ -1210,6 +1510,10 @@
       var id = btn.closest('li').getAttribute('data-id');
       var act = btn.getAttribute('data-act');
 
+      // 批量编辑的行内操作：改的是内存里的 state.posts，点「保存全部改动」才提交
+      if (act === 'toggle-hidden') return toggleHidden(id);
+      if (act === 'rmtag') return removeTag(id, btn.getAttribute('data-tag'));
+
       if (act === 'up') return movePost(id, -1);
       if (act === 'down') return movePost(id, 1);
       if (act === 'top') return movePost(id, 'top');
@@ -1220,13 +1524,38 @@
       else doDelete(id, post.title);
     });
 
-    $('#btn-sort').addEventListener('click', function () {
-      if (state.sorting) cancelSort();
-      else enterSort();
+    // 批量编辑：行内「＋标签」回车就加上。
+    // 加完要重新聚焦这一行的输入框 —— renderList() 会把整行重建，
+    // 不补这一下的话，想连加两个标签就得重新点一次。
+    $('#list').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var input = e.target.closest && e.target.closest('input.row-tag-input');
+      if (!input) return;
+      e.preventDefault();
+      var id = input.closest('li').getAttribute('data-id');
+      if (!addTag(id, input.value)) return;
+      var again = $('#list li[data-id="' +
+        (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] input.row-tag-input');
+      if (again) again.focus();
     });
-    $('#btn-sort-save').addEventListener('click', saveSort);
-    $('#btn-sort-cancel').addEventListener('click', cancelSort);
+
+    $('#btn-batch').addEventListener('click', function () {
+      if (state.batch) cancelBatch();
+      else enterBatch();
+    });
+    $('#btn-batch-save').addEventListener('click', saveBatch);
+    $('#btn-batch-cancel').addEventListener('click', cancelBatch);
     initDrag();
+
+    /* ---------- 标签总览 ---------- */
+    $('#btn-batch-tags').addEventListener('click', openTagOverview);
+    $('#btn-tags-save').addEventListener('click', applyTagOverview);
+    $('#btn-tags-cancel').addEventListener('click', backFromTags);
+    $('#btn-tags-back').addEventListener('click', backFromTags);
+    $('#tag-edit-list').addEventListener('input', renderTagsSummary);
+    $('#tag-edit-list').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); applyTagOverview(); }
+    });
 
     var tagbar = $('#admin-tagbar');
     if (tagbar) {
@@ -1267,7 +1596,8 @@
     window.addEventListener('beforeunload', function (e) {
       var dirty = (!$('#view-edit').hidden && isDirty()) ||
                   (!$('#view-site').hidden && isSiteDirty()) ||
-                  (state.sorting && sortDirty());
+                  (!$('#view-tags').hidden && tagsDirty()) ||
+                  (state.batch && batchDirty());
       if (dirty) {
         e.preventDefault();
         e.returnValue = '';
