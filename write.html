@@ -207,15 +207,31 @@
       </span>
     </label>
 
-    <label class="field">
+    <!-- 正文：这里是 div 不是 label —— 里面要塞「插入图片」按钮和一个
+         file input，套在 label 里的话点按钮会连带触发 label 的默认行为。 -->
+    <div class="field">
       <span>正文 · 支持 Markdown</span>
+      <div class="editor-tools">
+        <button class="btn btn-tool" id="btn-image" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+            <circle cx="8.6" cy="9.6" r="1.6"/>
+            <path d="M4 17.5l4.6-4.3a1.6 1.6 0 0 1 2.2 0L20 20"/>
+          </svg>
+          插入图片
+        </button>
+        <span class="tool-hint" id="image-hint">照片会自动压到长边 1600px 以内再传</span>
+      </div>
       <textarea id="f-content" placeholder="直接写就行。
 
 ## 小标题
 **粗体**、*斜体*、> 引用、- 列表 都支持。
 
 空行分段，段落内换行会保留。"></textarea>
-    </label>
+      <!-- 图片走同一个 GitHub Contents API 传到 assets/img/post/，跟文章一起发布 -->
+      <input type="file" id="f-image" accept="image/*" multiple hidden>
+    </div>
 
     <div id="preview-wrap" hidden>
       <div class="preview-label">预览</div>

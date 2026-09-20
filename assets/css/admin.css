@@ -151,6 +151,24 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 
 .btn-block { width: 100%; padding: 14px; font-size: 16px; }
 
+/* ---------- 正文的工具栏（插入图片） ---------- */
+.editor-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.btn-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.btn-tool svg { width: 16px; height: 16px; flex: none; }
+.tool-hint { font-size: 12.5px; color: var(--text-3); }
+
 /* ---------- 顶栏 ---------- */
 .admin-bar {
   display: flex;

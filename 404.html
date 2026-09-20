@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>走丢了 · Ever Eternity</title>
 <meta name="theme-color" content="#faf7f2">
-<link rel="icon" type="image/png" sizes="32x32" href="https://evereternity123.github.ioassets/img/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="https://evereternity123.github.ioassets/img/favicon-16.png">
-<link rel="apple-touch-icon" href="https://evereternity123.github.ioassets/img/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://evereternity123.github.io/assets/img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://evereternity123.github.io/assets/img/favicon-16.png">
+<link rel="apple-touch-icon" href="https://evereternity123.github.io/assets/img/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Ever Eternity">
 <meta property="og:title" content="走丢了 · Ever Eternity">
@@ -27,6 +27,19 @@
     var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', saved || sys);
   } catch (e) { /* ignore */ }
+})();
+</script>
+<!-- 分享出去的链接是 p/<id>.html（每篇文章一张，head 里写死了 og 标签，
+     微信才抓得到正确的预览卡片）。万一那一张还没生成 —— 比如文章是刚在
+     手机上发的、本地还没重新发布过 —— 就会落到这个 404 页。
+     这里把它转回动态那版，链接不会断，只是预览卡片退回通用样式。 -->
+<script>
+(function () {
+  var m = /^\/p\/([^\/]+)\.html$/.exec(location.pathname);
+  if (!m) return;
+  try {
+    location.replace('/post.html?p=' + encodeURIComponent(decodeURIComponent(m[1])));
+  } catch (e) { /* 路径畸形就不转，正常显示 404 */ }
 })();
 </script>
 </head>

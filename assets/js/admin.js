@@ -16,6 +16,15 @@
   var MAX_TAG_LEN = 24;      // 单个标签最长几个字（编辑页、批量编辑、标签总览共用）
   var MAX_TAGS = 8;          // 一篇文章最多几个标签
 
+  /* 插入图片。上传前一律在浏览器里重压一遍：
+     手机随手拍一张 3~5MB，原样塞进仓库会让每次部署都变慢，
+     写作台那点上行带宽也传得难受。压到长边 1600px、JPEG q=0.82，
+     一般 150~400KB —— 手机上看着完全够。 */
+  var IMG_DIR = 'assets/img/post';
+  var IMG_MAX_EDGE = 1600;                 // 长边上限（像素）
+  var IMG_QUALITY = 0.82;
+  var IMG_MAX_BYTES = 12 * 1024 * 1024;    // 原图超过这个直接拒，别让浏览器卡死
+
   var $ = function (s) { return document.querySelector(s); };
 
   var state = {
@@ -1433,6 +1442,161 @@
     wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /* ======================================================================
+     插入图片
+     ----------------------------------------------------------------------
+     选图（或直接粘贴截图）→ 在浏览器里重压 → 走 Contents API 传到
+     assets/img/post/ → 在光标处插入 ![](assets/img/post/xxx.jpg)。
+     图片和文章是**两次独立提交**：图先传，文章要等点「保存并发布」。
+     所以传完图但没保存就离开，仓库里会留下一张没人引用的图 —— 不致命。
+     ====================================================================== */
+
+  /* 压到长边 IMG_MAX_EDGE 以内。PNG 可能有透明，继续存 PNG；其余一律 JPEG。 */
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+
+      img.onload = function () {
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        URL.revokeObjectURL(url);
+        if (!w || !h) { reject(new Error('读不出这张图的尺寸')); return; }
+
+        var scale = Math.min(1, IMG_MAX_EDGE / Math.max(w, h));
+        var tw = Math.max(1, Math.round(w * scale));
+        var th = Math.max(1, Math.round(h * scale));
+
+        var canvas = document.createElement('canvas');
+        canvas.width = tw;
+        canvas.height = th;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, tw, th);
+
+        var isPng = /png/i.test(file.type);
+        var type = isPng ? 'image/png' : 'image/jpeg';
+        canvas.toBlob(function (blob) {
+          if (!blob) { reject(new Error('浏览器没能把这张图转出来')); return; }
+          resolve({ blob: blob, ext: isPng ? 'png' : 'jpg', w: tw, h: th });
+        }, type, IMG_QUALITY);
+      };
+
+      // iPhone 的 HEIC 在 Safari 里能解开、在别的浏览器里解不开，
+      // 这条错误提示就是给后者看的。
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('这个文件浏览器解不开（HEIC 之类），先转成 JPG 再传'));
+      };
+
+      img.src = url;
+    });
+  }
+
+  function blobToB64(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var s = String(fr.result || '');
+        var comma = s.indexOf(',');
+        if (comma < 0) { reject(new Error('读文件失败')); return; }
+        resolve(s.slice(comma + 1));
+      };
+      fr.onerror = function () { reject(new Error('读文件失败')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  /* 名字带上日期和时间戳：既看得出是哪天传的，又不会和已有的撞上
+     （Contents API 覆盖同名文件要带 sha，不带就是 422）。 */
+  function imageName(ext) {
+    var d = new Date();
+    var day = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') +
+              String(d.getDate()).padStart(2, '0');
+    return 'img-' + day + '-' + Date.now().toString(36) +
+           Math.random().toString(36).slice(2, 5) + '.' + ext;
+  }
+
+  function uploadImage(file) {
+    return compressImage(file).then(function (out) {
+      return blobToB64(out.blob).then(function (b64) {
+        var path = IMG_DIR + '/' + imageName(out.ext);
+        return gh(contentsPathOf(path), {
+          method: 'PUT',
+          body: {
+            message: '图片：' + path.split('/').pop(),
+            content: b64,
+            branch: CFG.branch || 'main'
+          }
+        }).then(function () {
+          return { path: path, w: out.w, h: out.h, bytes: out.blob.size };
+        });
+      });
+    });
+  }
+
+  /* 插到光标处。图片单独占一行 —— 前后紧贴着文字的话，Markdown 渲染出来
+     会和文字挤在同一段里。 */
+  function insertAtCursor(ta, text) {
+    var start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+    var end = ta.selectionEnd == null ? start : ta.selectionEnd;
+    var before = ta.value.slice(0, start);
+    var after = ta.value.slice(end);
+    var head = (before && !/\n$/.test(before)) ? '\n\n' : '';
+    var tail = (after && !/^\n/.test(after)) ? '\n\n' : '';
+    var chunk = head + text + tail;
+
+    ta.value = before + chunk + after;
+    var pos = (before + chunk).length;
+    ta.selectionStart = ta.selectionEnd = pos;
+    ta.focus();
+  }
+
+  /* 一张一张串着传：GitHub 的 Contents API 没有批量接口，
+     并发 PUT 还可能互相撞 sha，慢一点但不会出错。 */
+  function insertImages(files) {
+    var list = [].slice.call(files || []);
+    if (!list.length) return;
+
+    var tooBig = list.filter(function (f) { return f.size > IMG_MAX_BYTES; });
+    if (tooBig.length) {
+      toast(tooBig.length + ' 张图超过 ' +
+            Math.round(IMG_MAX_BYTES / 1024 / 1024) + 'MB，先压一下再传', true);
+      list = list.filter(function (f) { return f.size <= IMG_MAX_BYTES; });
+      if (!list.length) return;
+    }
+
+    var ta = $('#f-content');
+    var btn = $('#btn-image');
+    var hint = $('#image-hint');
+    var HINT_IDLE = '照片会自动压到长边 ' + IMG_MAX_EDGE + 'px 以内再传';
+    var done = 0, failed = 0;
+
+    btn.disabled = true;
+
+    function step(i) {
+      if (i >= list.length) {
+        btn.disabled = false;
+        hint.textContent = HINT_IDLE;
+        toast(failed ? ('插入了 ' + done + ' 张，' + failed + ' 张没传上去')
+                     : ('已插入 ' + done + ' 张图片'), failed > 0);
+        // 直接改 textarea.value 不会触发 input 事件，草稿和「有改动」得自己叫一次
+        state.editing = readForm();
+        scheduleDraft();
+        return;
+      }
+      hint.textContent = '正在上传 ' + (i + 1) + ' / ' + list.length + '…';
+      uploadImage(list[i]).then(function (info) {
+        insertAtCursor(ta, '![](' + info.path + ')');
+        done++;
+      }).catch(function (err) {
+        failed++;
+        toast(err.message, true);
+      }).then(function () { step(i + 1); });
+    }
+
+    step(0);
+  }
+
   function doExport() {
     var blob = new Blob([JSON.stringify(state.posts, null, 2) + '\n'],
                         { type: 'application/json' });
@@ -1649,6 +1813,28 @@
     $('#btn-back').addEventListener('click', backToList);
     $('#btn-save').addEventListener('click', doSave);
     $('#btn-preview').addEventListener('click', togglePreview);
+
+    /* ---------- 插入图片 ---------- */
+    $('#btn-image').addEventListener('click', function () { $('#f-image').click(); });
+    $('#f-image').addEventListener('change', function () {
+      insertImages(this.files);
+      // 清空，否则「再选一次同一个文件」不会触发 change
+      this.value = '';
+    });
+    // 电脑上直接 Ctrl+V 粘截图比走文件选择器顺手得多
+    $('#f-content').addEventListener('paste', function (e) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      var files = [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+          var f = items[i].getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (!files.length) return;   // 粘的是文字就按默认行为走
+      e.preventDefault();
+      insertImages(files);
+    });
     $('#btn-refresh').addEventListener('click', refresh);
     $('#btn-export').addEventListener('click', doExport);
 

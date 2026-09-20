@@ -23,6 +23,11 @@
      和页面里 og:url 那几处写的是同一个地址。 */
   var SITE_ORIGIN = 'https://evereternity123.github.io';
 
+  /* 每篇文章的静态页（p/<id>.html，由 .tools/build-posts.py 生成）里会写上
+     自己的 id。它优先于 ?p= —— 这样 /p/xxx.html 不带查询参数也能知道是哪篇。
+     post.html 里这个值是空字符串（标记位没被替换过）。 */
+  var STATIC_ID = typeof window.EE_POST_ID === 'string' ? window.EE_POST_ID : '';
+
   var POSTS = [];
 
   var MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月',
@@ -245,14 +250,23 @@
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
   }
 
-  /* ---------- 复制文章链接 ---------- */
+  /* ---------- 分享文章链接 ---------- */
   /* 给出「正式地址」。本地双击打开时 location.origin 是 null、起本地服务时是
      localhost —— 都不该被复制出去，所以退回站点域名。 */
+  function siteOrigin() {
+    if (location.protocol === 'file:' ||
+        /^(localhost|127\.|\[::1\])/.test(location.hostname)) return SITE_ORIGIN;
+    return location.origin;
+  }
+
+  /* ⚠️ 分享出去的必须是 p/<id>.html，不能是 post.html?p=<id>。
+     微信 / QQ 抓预览卡片时只看静态 HTML 里的 og 标签，不跑 JS ——
+     post.html 是同一份文件、og:title 只能写一个通用的；
+     p/<id>.html 是每篇一张、标题和摘要都写死在 <head> 里。
+     万一那篇还没生成（刚在手机上发、本地还没重新发布过），
+     404.html 会把它转回 post.html?p=<id>，链接不会断。 */
   function shareUrl(id) {
-    var base = (location.protocol === 'file:' || /^(localhost|127\.|\[::1\])/.test(location.hostname))
-      ? SITE_ORIGIN + '/post.html'
-      : location.origin + location.pathname;
-    return base + '?p=' + encodeURIComponent(id);
+    return siteOrigin() + '/p/' + encodeURIComponent(id) + '.html';
   }
 
   /* 剪贴板 API 要求安全上下文（https 或 localhost）。
@@ -294,7 +308,7 @@
         btn.classList.add('done');
         clearTimeout(resetTimer);
         resetTimer = setTimeout(function () {
-          label.textContent = '复制链接';
+          label.textContent = '分享本文';
           btn.classList.remove('done');
         }, 1800);
       }).catch(function () {
@@ -373,7 +387,8 @@
     if (!bodyEl) return;
 
     var shown = visiblePosts();
-    var id = param('p');
+    // 静态页（p/<id>.html）里写死了 id，优先用它；post.html 走 ?p=
+    var id = STATIC_ID || param('p');
     // 隐藏的文章不在列表里，但知道链接就打得开（方便自己先看看效果）
     var post = id ? byId(id) : (shown[0] || POSTS[0]);
     var wrap = $('#post-main');
