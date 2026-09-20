@@ -1,5 +1,6 @@
 {
   "ids": [
+    "p-mu8lrn0y",
     "openai",
     "p-mu85603q",
     "p-mu856v63",
@@ -33,5 +34,14 @@
     "phone-silent-script",
     "first-day-of-spring",
     "hello"
+  ],
+  "tags": [
+    "随笔",
+    "金融",
+    "人生",
+    "教育",
+    "科技",
+    "文摘",
+    "Test"
   ]
 }
