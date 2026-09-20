@@ -23,6 +23,12 @@
      和页面里 og:url 那几处写的是同一个地址。 */
   var SITE_ORIGIN = 'https://evereternity123.github.io';
 
+  /* 站点名，只用在「分享本文」复制出来的那行文字里（见 shareText）。
+     和 DEFAULT_AUTHOR 目前是同一个字符串，但**语义不同** ——
+     哪天想把署名改成别的，别顺手把这个也改了。
+     `.tools/build-posts.py` 里的 SITE_NAME 要跟着一起改（og:site_name 用它）。 */
+  var SITE_NAME = 'Ever Eternity';
+
   /* 每篇文章的静态页（p/<id>.html，由 .tools/build-posts.py 生成）里会写上
      自己的 id。它优先于 ?p= —— 这样 /p/xxx.html 不带查询参数也能知道是哪篇。
      post.html 里这个值是空字符串（标记位没被替换过）。 */
@@ -269,6 +275,21 @@
     return siteOrigin() + '/p/' + encodeURIComponent(id) + '.html';
   }
 
+  /* 「分享本文」复制出去的正文：**一行**，形如
+       文章标题-Ever Eternity的博客-https://…/p/<id>.html
+     （2026-09-20 用户给的格式，照抄，别自作主张加空格或换行）。
+
+     为什么带上标题和站点名：只给一个网址的话，粘到不抓卡片的地方
+     （备忘录、短信、某些聊天工具、邮件）就只剩一串字符，看不出是哪一篇。
+     标题用文章自己的 title，**不缀页面 <title> 里那个「 · Ever Eternity」**——
+     站点名已经单独出现在中间那一段了，缀两遍重复。
+     标题为空（理论上不该有）就退化成「站点名-链接」，别拼出个空标题。 */
+  function shareText(post) {
+    var title = String((post && post.title) || '').trim();
+    var head = title ? title + '-' : '';
+    return head + SITE_NAME + '的博客-' + shareUrl(post && post.id);
+  }
+
   /* 剪贴板 API 要求安全上下文（https 或 localhost）。
      本地双击打开是 file://，navigator.clipboard 直接不存在，
      所以留一条 textarea + execCommand 的老路兜底。 */
@@ -300,8 +321,8 @@
     var resetTimer = null;
 
     btn.addEventListener('click', function () {
-      copyText(shareUrl(post.id)).then(function () {
-        toast('已复制网页链接');
+      copyText(shareText(post)).then(function () {
+        toast('已复制标题和链接');
         // 按钮自己也变一下，光标不在提示条附近时也看得到反馈
         if (!label) return;
         label.textContent = '已复制';

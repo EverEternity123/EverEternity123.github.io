@@ -298,18 +298,38 @@ node .tools/preview.js
 ### 分享本文
 
 文章正文底部（标签下面、上一篇/下一篇上面）有一个**「分享本文」**按钮。
-点一下把这篇的**分享地址**复制到剪贴板，同时：
+点一下把这篇的**标题 + 站点名 + 链接**复制到剪贴板，同时：
 
-- 弹一条「已复制网页链接」，2 秒多自己消失
+- 弹一条「已复制标题和链接」，2 秒多自己消失
 - 按钮自己变成「已复制」并填上主题色，1.8 秒后变回来
 
-复制出来的一定是**正式网址**（`https://evereternity123.github.io/p/<id>.html`）——
+复制出来的是**一行**，长这样（三段用连字符相连、不加空格）：
+
+```
+有哪些是你高考后才明白的事？-Ever Eternity的博客-https://evereternity123.github.io/p/p-mu8lrn0y.html
+```
+
+> **为什么带上标题和站点名**：只给一个网址的话，粘到不抓卡片的地方（备忘录、短信、
+> 某些聊天工具、邮件）就只剩一串字符，看不出是哪一篇、是谁写的。
+>
+> 标题用文章自己的 `title`，**不缀页面 `<title>` 里那个「 · Ever Eternity」**——
+> 站点名已经单独出现在中间那一段，缀两遍就重复了。
+
+链接一定是**正式网址**（`https://evereternity123.github.io/p/<id>.html`）——
 在本地双击打开（`file://`）或者起本地服务（`localhost`）时也一样，
 不会把 `file://` 那种没法分享的地址复制走。
 
 > 剪贴板 API（`navigator.clipboard`）只在安全上下文里有。本地双击打开是
 > `file://`，那个 API 直接不存在，所以留了一条 textarea + `execCommand`
 > 的老路兜底 —— 本地调试时按钮同样能用。
+>
+> ⚠️ 拼串只有一处：`shareText(post)`（`assets/js/app.js`）。
+> 别绕过它直接 `copyText(shareUrl(...))` —— 那样就只剩链接了，
+> 而且两个入口（`post.html?p=` 与静态页 `p/<id>.html`）会拼出不一样的东西。
+> 站点名是 `SITE_NAME` 常量（和 `DEFAULT_AUTHOR` 目前同值但**语义不同**，
+> 别顺手一起改）；`.tools/build-posts.py` 里的 `SITE_NAME` 是 og:site_name 用的，
+> 改站点名时两处都要动。`check-content.js` 和 `verify-hidden.py` /
+> `verify-share.py` 都在盯着这条格式（后两个是**整串逐字比对**）。
 
 ### 分享出去的预览卡片（每篇文章一张静态页）
 
