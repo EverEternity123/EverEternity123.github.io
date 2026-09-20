@@ -445,7 +445,7 @@
       }).join('');
     }
 
-    // 正文底部的「复制链接」。放在上一篇/下一篇之前 —— 读完正文就该看到它
+    // 正文底部的「分享本文」按钮。放在上一篇/下一篇之前 —— 读完正文就该看到它
     initShare(post);
 
     bodyEl.innerHTML = MD.render(post.content);
