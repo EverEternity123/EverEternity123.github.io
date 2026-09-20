@@ -29,12 +29,14 @@
     filterTag: '',    // 列表页当前选中的标签，'' = 全部
     site: null,       // data/site.json 的内容（首页介绍 / 关于页 / 页脚）
     siteSha: null,    // site.json 的 blob sha，提交时必须带上
-    order: { ids: [] }, // data/order.json 的内容：自定义顺序
+    order: { ids: [], tags: [] }, // data/order.json 的内容：文章顺序 + 标签顺序
     orderSha: null,     // order.json 的 blob sha，提交时必须带上
+    tagOrder: [],       // 标签的当前先后（= order.tags，拖完立刻改它）
     batch: false,       // 是否处于「批量编辑」模式（排序 + 改标签 + 隐藏）
-    batchBaseline: null,// 进入那一刻的顺序快照，用来判断顺序有没有动过
+    batchBaseline: null,// 进入那一刻的顺序快照，用来判断文章顺序有没有动过
+    batchBaselineTags: [], // 进入那一刻的标签顺序快照
     batchSnapshot: null,// 进入那一刻的文章深拷贝，取消时用它整体回滚
-    tagEdit: null       // 标签总览那一屏的工作副本 [{from, to}]
+    tagEdit: null       // 标签总览那一屏的初始内容 [{from, to}]
   };
 
   /* ======================================================================
@@ -160,21 +162,23 @@
   }
 
   /* ======================================================================
-     显示顺序
+     显示顺序（文章 + 标签）
      ----------------------------------------------------------------------
      真正的规则在 assets/js/order.js（前台也用它），这里只负责取数据。
      一句话：不在 order.json 里的文章（＝新发的）按日期排在最前面，
-     在里面的按列表顺序排在后面。
+     在里面的按列表顺序排在后面。标签同理，没记过的排在后面。
      ====================================================================== */
 
-  /* order.json 的内容 → { ids: [...] }。文件坏掉就当没排过序，不阻断列表 */
+  /* order.json 的内容 → { ids: [...], tags: [...] }。
+     文件坏掉就当没排过序，不阻断列表；老文件没有 tags 字段也一样。 */
   function parseOrder(content) {
+    var empty = { ids: [], tags: [] };
     try {
       var obj = JSON.parse(b64decode(content));
-      var ids = window.EE_ORDER ? window.EE_ORDER.idsOf(obj) : [];
-      return { ids: ids };
+      if (!window.EE_ORDER) return empty;
+      return { ids: window.EE_ORDER.idsOf(obj), tags: window.EE_ORDER.tagsOf(obj) };
     } catch (e) {
-      return { ids: [] };
+      return empty;
     }
   }
 
@@ -191,10 +195,24 @@
     return state.posts.map(function (p) { return p.id; });
   }
 
-  /* 批量编辑模式下：跟进入时的快照比，有没有动过（顺序 / 标签 / 隐藏都算） */
+  /* 标签的当前先后（没记过的按「出现次数多的在前」，跟以前一样）。
+     首页标签栏、归档标签云、写作台这一条筛选栏都用这个顺序。 */
+  function tagOrderList() {
+    var st = tagStats(state.posts);
+    if (window.EE_ORDER) return window.EE_ORDER.sortTags(st.list, state.tagOrder || []);
+    return st.list;
+  }
+
+  function tagOrderDirty() {
+    return (state.tagOrder || []).join('\u0000') !==
+           (state.batchBaselineTags || []).join('\u0000');
+  }
+
+  /* 批量编辑模式下：跟进入时的快照比，有没有动过
+     （文章顺序 / 标签顺序 / 标签 / 隐藏，四样都算） */
   function batchDirty() {
     var c = batchChanges();
-    return c.order || c.tags.length > 0 || c.hidden.length > 0;
+    return c.order || c.tagOrder || c.tags.length > 0 || c.hidden.length > 0;
   }
 
   function loadPosts() {
@@ -216,7 +234,8 @@
       if (!Array.isArray(list)) throw new Error('posts.json 格式不对：顶层应该是数组');
 
       state.orderSha = odata ? odata.sha : null;
-      state.order = odata ? parseOrder(odata.content) : { ids: [] };
+      state.order = odata ? parseOrder(odata.content) : { ids: [], tags: [] };
+      state.tagOrder = state.order.tags.slice();
       state.posts = applyOrder(list);
     }).catch(function (err) {
       // 文件还不存在（第一次用）：允许从空列表开始，保存时会创建它
@@ -312,10 +331,12 @@
     state.filterTag = '';
     state.site = null;
     state.siteSha = null;
-    state.order = { ids: [] };
+    state.order = { ids: [], tags: [] };
     state.orderSha = null;
+    state.tagOrder = [];
     state.batch = false;
     state.batchBaseline = null;
+    state.batchBaselineTags = [];
     state.batchSnapshot = null;
     state.tagEdit = null;
     $('#f-token').value = '';
@@ -327,20 +348,24 @@
      文章列表
      ====================================================================== */
 
-  /* 数一遍所有标签：list 按「出现次数多的在前」排，count 是每个标签的篇数。
-     和首页的标签栏同一套口径（含已隐藏的文章 —— 这里是管理界面，得看全）。 */
+  /* 数一遍所有标签：count 是每个标签的篇数，list 按**第一次出现**的先后排。
+     含已隐藏的文章 —— 这里是管理界面，得看全。
+     ⚠️ list 用「第一次出现」而不是「出现次数多的在前」：这样它跟首页标签栏的
+        兜底顺序是同一个口径，标签总览里看到的先后 = 首页上看到的先后，
+        拖起来才所见即所得（以前按篇数排，拖之前两边显示的顺序不一样，踩过）。
+     ⚠️ 真正显示时还要再过一遍 tagOrderList()，让拖过的标签排到前面去。 */
   function tagStats(posts) {
     var count = Object.create(null);
+    var order = [];
     posts.forEach(function (p) {
       (p.tags || []).forEach(function (t) {
         var k = String(t).trim();
-        if (k) count[k] = (count[k] || 0) + 1;
+        if (!k) return;
+        if (count[k] === undefined) { count[k] = 0; order.push(k); }
+        count[k]++;
       });
     });
-    var list = Object.keys(count).sort(function (a, b) {
-      return count[b] - count[a] || a.localeCompare(b, 'zh');
-    });
-    return { list: list, count: count };
+    return { list: order, count: count };
   }
 
   /* 当前筛选下要显示的文章 */
@@ -363,7 +388,8 @@
 
     var html = '<button class="tag-btn' + (state.filterTag ? '' : ' on') +
                '" data-tag="">全部<span class="count">' + state.posts.length + '</span></button>';
-    st.list.forEach(function (t) {
+    // 顺序跟首页标签栏一致 —— 标签总览里拖过就按拖的来
+    tagOrderList().forEach(function (t) {
       html += '<button class="tag-btn' + (state.filterTag === t ? ' on' : '') +
               '" data-tag="' + esc(t) + '">' + esc(t) +
               '<span class="count">' + st.count[t] + '</span></button>';
@@ -489,10 +515,10 @@
 
   /* ---------- 批量编辑：待保存的改动 ---------- */
 
-  /* 跟进入批量编辑时的快照比，看动了什么。顺序、标签、公开状态三类 */
+  /* 跟进入批量编辑时的快照比，看动了什么。文章顺序、标签顺序、标签、公开状态 */
   function batchChanges() {
     var snap = state.batchSnapshot;
-    if (!snap) return { order: false, tags: [], hidden: [] };
+    if (!snap) return { order: false, tagOrder: false, tags: [], hidden: [] };
 
     var before = {};
     snap.forEach(function (p) { before[p.id] = p; });
@@ -508,6 +534,7 @@
 
     return {
       order: currentIds().join('\u0000') !== beforeOrder.join('\u0000'),
+      tagOrder: tagOrderDirty(),
       tags: tags,
       hidden: hidden
     };
@@ -521,6 +548,7 @@
     var c = batchChanges();
     var parts = [];
     if (c.order) parts.push('顺序有调整');
+    if (c.tagOrder) parts.push('标签顺序有调整');
     if (c.tags.length) parts.push(c.tags.length + ' 篇的标签改了');
     if (c.hidden.length) parts.push(c.hidden.length + ' 篇的公开状态改了');
 
@@ -543,17 +571,20 @@
     }
     state.batch = true;
     state.filterTag = '';
-    state.batchBaseline = currentIds();                             // 顺序基线
+    state.batchBaseline = currentIds();                             // 文章顺序基线
+    state.batchBaselineTags = (state.tagOrder || []).slice();        // 标签顺序基线
     state.batchSnapshot = JSON.parse(JSON.stringify(state.posts));  // 取消时回滚用
     renderList();
   }
 
   function cancelBatch() {
     var c = batchChanges();
-    var n = (c.order ? 1 : 0) + c.tags.length + c.hidden.length;
+    var n = (c.order ? 1 : 0) + (c.tagOrder ? 1 : 0) + c.tags.length + c.hidden.length;
     if (n && !window.confirm('有 ' + n + ' 处改动还没保存，确定放弃吗？')) return;
     state.batch = false;
     state.batchBaseline = null;
+    state.tagOrder = (state.batchBaselineTags || []).slice();   // 标签顺序也退回进入时的样子
+    state.batchBaselineTags = [];
     state.posts = applyOrder(state.batchSnapshot || state.posts);
     state.batchSnapshot = null;
     renderList();
@@ -599,7 +630,12 @@
     return true;
   }
 
-  /* delta：-1 上移一位 / 1 下移一位 / 'top' 移到最前 */
+  /* delta：-1 上移一位 / 1 下移一位 / 'top' 移到最前
+     ----------------------------------------------------------------------
+     以前是「改完 state.posts 就 renderList()」，整张表重画一遍 —— 顺序确实变了，
+     但看上去是「啪」地跳过去，眼睛跟不上，会怀疑到底动没动。
+     现在走跟拖拽同一套 FLIP：其它行滑到新位置，被挪的那行再闪一下确认落点。
+     （所以这里也不能 renderList()，会把刚起头的动画打断。） */
   function movePost(id, delta) {
     var i = -1;
     for (var k = 0; k < state.posts.length; k++) {
@@ -610,12 +646,31 @@
     var j = delta === 'top' ? 0 : i + delta;
     if (j < 0 || j >= state.posts.length || j === i) return;
 
-    var moved = state.posts.splice(i, 1)[0];
-    state.posts.splice(j, 0, moved);
-    renderList();
+    var ul = $('#list');
+    var li = ul.querySelector('li[data-id="' +
+      (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+
+    flipReorder(function () {
+      var moved = state.posts.splice(i, 1)[0];
+      state.posts.splice(j, 0, moved);
+
+      // DOM 跟着 state.posts 重排一遍：appendChild 会「移动」已有节点，
+      // 所以按目标顺序挨个 append 就等于排序，不用自己算插到谁前面。
+      var byId = {};
+      [].slice.call(ul.querySelectorAll('li')).forEach(function (row) {
+        byId[row.getAttribute('data-id')] = row;
+      });
+      state.posts.forEach(function (p) { if (byId[p.id]) ul.appendChild(byId[p.id]); });
+
+      renumberRows();
+    }, ul);
+
+    refreshMoveButtons();
+    settleRow(li);
+    // 以前整表重画顺手就把「待保存」那行刷新了，现在不重画，得自己叫一次
+    renderBatchSummary();
 
     // 手机上一屏放不下几行，挪完把这一行滚回视野里，不然会「找不到刚才那篇」
-    var li = $('#list li[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
     if (li && li.scrollIntoView) {
       try { li.scrollIntoView({ block: 'nearest' }); } catch (e) { /* 老浏览器忽略 */ }
     }
@@ -626,15 +681,29 @@
      ----------------------------------------------------------------------
      ⚠️ 不要用 HTML5 的 draggable / dragstart —— 它在触屏上**根本不触发**
      （安卓/iOS 都不发 drag 事件），而这个写作台主要在手机上用。
-     改用 Pointer Events：鼠标按住行就能拖；手指要按住**左侧的序号**
-     （那是拖拽把手，CSS 里 touch-action:none，所以不会变成滚动页面）。
+     改用 Pointer Events：鼠标按住行就能拖；手指要按住**把手**
+     （CSS 里 touch-action:none，所以不会变成滚动页面）。
 
      拖动过程中直接搬 DOM（把被拖的 li insertBefore 到目标位置），
      不搞幽灵元素 —— 少一层同步，落点就是最终落点。
+
+     两个地方用它，差别只有三处（容器、手指按哪、松手后怎么把顺序读回去），
+     所以做成「一份实现 + 一张注册表」，而不是把这一百行抄两遍：
+       · 文章列表 #list          → 决定文章的先后
+       · 标签总览 #tag-edit-list → 决定首页标签栏里标签的先后
      ====================================================================== */
 
   var dragState = null;
   var DRAG_MARGIN = 72;      // 离视口上下边缘多近开始自动滚动
+
+  /* { root, handle, key, commit }
+       root   —— 装 li 的容器选择器
+       handle —— 手指必须按住的把手选择器（鼠标不用按它，整行可拖）
+       key    —— 每行上用来认身份的属性名（文章是 data-id，标签是 data-from）
+       commit —— 松手后拿 DOM 里的新顺序去更新数据，参数是 key 值数组 */
+  var DRAG_ZONES = [];
+
+  function registerDragZone(zone) { DRAG_ZONES.push(zone); }
 
   function dragCleanup() {
     if (!dragState) return;
@@ -647,9 +716,10 @@
     dragState = null;
   }
 
-  /* 把序号重新编一遍（搬完 DOM 之后编号会乱） */
-  function renumberRows() {
-    var rows = $('#list').querySelectorAll('li .ord');
+  /* 把序号重新编一遍（搬完 DOM 之后编号会乱）。
+     只有文章列表有「序号」这回事，标签总览那边不调它。 */
+  function renumberRows(root) {
+    var rows = (root || $('#list')).querySelectorAll('li .ord');
     for (var i = 0; i < rows.length; i++) rows[i].textContent = String(i + 1);
   }
 
@@ -678,10 +748,14 @@
 
   /* FLIP：先量位置 → 改 DOM → 补一个反向位移再过渡回 0，
      这样其它行是「滑」到新位置，而不是瞬间跳过去。
+     container 不给就默认文章列表（拖拽用）；↑↓ 按钮和标签总览会显式传进来。
      ⚠️ 量位置用 offsetTop，不用 getBoundingClientRect()：后者把 transform
-     算进去，上一次动画还没跑完时量到的就是中间态，位移量会算错（越拖越飘）。 */
-  function flipReorder(mutate) {
-    var lis = [].slice.call($('#list').querySelectorAll('li'));
+     算进去，上一次动画还没跑完时量到的就是中间态，位移量会算错（越拖越飘）。
+     ⚠️ 被拖的那一行要跳过（它跟手，不该再被动画拉回去）。dragState 可能为
+     null —— ↑↓ 按钮走的就是这条路，所以不能直接读 dragState.li。 */
+  function flipReorder(mutate, container) {
+    var root = container || $('#list');
+    var lis = [].slice.call(root.querySelectorAll('li'));
     var tops = [];
     var i;
     for (i = 0; i < lis.length; i++) tops.push(lis[i].offsetTop);
@@ -690,7 +764,7 @@
 
     for (i = 0; i < lis.length; i++) {
       var li = lis[i];
-      if (li === dragState.li) continue;        // 被拖的那行跟手，不参与动画
+      if (dragState && li === dragState.li) continue;
       var dy = tops[i] - li.offsetTop;
       if (!dy) continue;
       li.style.transition = 'none';
@@ -711,10 +785,11 @@
 
   /* 指针位置下面是哪一行（被拖的那行 pointer-events:none，所以会被"看穿"） */
   function rowUnder(x, y) {
+    if (!dragState) return null;
     var el = document.elementFromPoint(x, y);
     if (!el || !el.closest) return null;
-    var li = el.closest('#list li');
-    if (!li || !dragState || li === dragState.li) return null;
+    var li = el.closest(dragState.zone.root + ' li');
+    if (!li || li === dragState.li) return null;
     return li;
   }
 
@@ -752,48 +827,45 @@
     if (ref === dragState.li || ref === dragState.li.nextSibling) return;
     flipReorder(function () {
       dragState.li.parentNode.insertBefore(dragState.li, ref);
-    });
-    renumberRows();
+    }, dragState.root);
+    if (dragState.zone.renumber) renumberRows(dragState.root);
   }
 
   function dragEnd() {
     if (!dragState) return;
     var wasActive = dragState.active;
     var dragged = dragState.li;
+    var zone = dragState.zone;
+    var root = dragState.root;
     dragCleanup();
     if (!wasActive) return;
 
-    // 把 DOM 里的顺序读回 state.posts
-    var ids = [];
-    var rows = $('#list').querySelectorAll('li');
-    for (var i = 0; i < rows.length; i++) ids.push(rows[i].getAttribute('data-id'));
+    // 把 DOM 里的新顺序读出来，交给这一区自己的 commit 去更新数据
+    var order = [];
+    var rows = root.querySelectorAll('li');
+    for (var i = 0; i < rows.length; i++) {
+      var v = rows[i].getAttribute(zone.key);
+      if (v) order.push(v);
+    }
+    zone.commit(order);
 
-    var byId = {};
-    state.posts.forEach(function (p) { byId[p.id] = p; });
-    var next = [];
-    ids.forEach(function (id) { if (byId[id]) next.push(byId[id]); });
-    // 兜底：万一有哪篇没进 DOM（理论上不会），原样补在后面，别把它弄丢
-    state.posts.forEach(function (p) {
-      if (ids.indexOf(p.id) === -1) next.push(p);
-    });
-
-    state.posts = next;
     // ⚠️ 这里**不能** renderList()：整表重画会闪一下，还会把刚做完的位移动画打断。
     //    序号在拖动过程中已经编好，只需要补一下首末行的按钮禁用状态。
-    refreshMoveButtons();
+    if (zone.renumber) refreshMoveButtons();
     settleRow(dragged);
   }
 
-  function dragStart(li, e) {
+  function dragStart(zone, li, e) {
     var isTouch = e.pointerType === 'touch';
-    // 手指只认把手（序号），否则一按住就拖，页面没法滚了
-    if (isTouch && !(e.target.closest && e.target.closest('.ord'))) return;
-    // 点按钮 / 想打字不算拖。⚠️ input 也要排除：批量编辑下整行可拖，
+    // 手指只认把手，否则一按住就拖，页面没法滚了
+    if (isTouch && !(e.target.closest && e.target.closest(zone.handle))) return;
+    // 点按钮 / 想打字不算拖。⚠️ input 也要排除：整行可拖的情况下，
     //    被拖的行会拿到 pointer-events:none，点进输入框就永远聚焦不上。
     if (e.target.closest && e.target.closest('button, input, textarea, select, a')) return;
 
     dragState = {
-      li: li, y0: e.clientY, x0: e.clientX, y: e.clientY,
+      zone: zone, root: $(zone.root), li: li,
+      y0: e.clientY, x0: e.clientX, y: e.clientY,
       pid: e.pointerId, active: false, isTouch: isTouch, timer: null
     };
 
@@ -820,30 +892,77 @@
     } catch (err) { /* ignore */ }
   }
 
+  /* 给每个拖拽区挂上 pointerdown。判断「能不能拖」交给 zone.enabled ——
+     文章列表只在批量编辑模式下可拖（平时列表要能正常选中文字），
+     标签总览那一屏本身就是干这个的，随时可拖。 */
   function initDrag() {
-    $('#list').addEventListener('pointerdown', function (e) {
-      if (state.batch !== true || dragState) return;
-      if (e.button && e.button !== 0) return;              // 只认左键
-      var li = e.target.closest && e.target.closest('#list li');
-      if (!li) return;
-      dragStart(li, e);
-      // 鼠标：按住就可以直接拖，不用等
-      if (e.pointerType !== 'touch') dragActivate();
+    DRAG_ZONES.forEach(function (zone) {
+      var root = $(zone.root);
+      if (!root) return;
+      root.addEventListener('pointerdown', function (e) {
+        if (dragState || (zone.enabled && !zone.enabled())) return;
+        if (e.button && e.button !== 0) return;              // 只认左键
+        var li = e.target.closest && e.target.closest(zone.root + ' li');
+        if (!li) return;
+        dragStart(zone, li, e);
+        // 鼠标：按住就可以直接拖，不用等
+        if (e.pointerType !== 'touch') dragActivate();
+      });
     });
   }
 
-  /* 保存批量编辑：标签 / 公开状态进 posts.json，顺序进 order.json。
+  /* 文章列表：松手后把 DOM 顺序读回 state.posts */
+  function commitPostOrder(ids) {
+    var byId = {};
+    state.posts.forEach(function (p) { byId[p.id] = p; });
+    var next = [];
+    ids.forEach(function (id) { if (byId[id]) next.push(byId[id]); });
+    // 兜底：万一有哪篇没进 DOM（理论上不会），原样补在后面，别把它弄丢
+    state.posts.forEach(function (p) {
+      if (ids.indexOf(p.id) === -1) next.push(p);
+    });
+    state.posts = next;
+  }
+
+  /* 标签总览：松手后按 DOM 顺序记住标签先后。
+     ⚠️ 这里**不重画**列表 —— 那一行的输入框里可能有用户刚打的字，
+        重画就没了。state.tagEdit 只是初始内容，渲染完 DOM 就是准的。 */
+  function commitTagOrder() {
+    state.tagOrder = readTagEdit().map(function (r) { return r.from; });
+    renderTagsSummary();
+  }
+
+  function registerDragZones() {
+    registerDragZone({
+      root: '#list',
+      handle: '.ord',                    // 手指按住序号才能拖
+      key: 'data-id',
+      renumber: true,
+      enabled: function () { return state.batch === true; },
+      commit: commitPostOrder
+    });
+    registerDragZone({
+      root: '#tag-edit-list',
+      handle: '.tag-grip',
+      key: 'data-from',
+      renumber: false,
+      commit: commitTagOrder
+    });
+  }
+
+  /* 保存批量编辑：标签 / 公开状态进 posts.json，文章顺序 + 标签顺序进 order.json。
      Contents API 一次只能写一个文件，所以两处都有改动时就是两次提交；
      任一步失败都重新拉一遍，别让界面跟远端不一致。 */
   function saveBatch() {
     var c = batchChanges();
-    if (!c.order && !c.tags.length && !c.hidden.length) {
+    if (!c.order && !c.tagOrder && !c.tags.length && !c.hidden.length) {
       toast('还没有任何改动');
       return;
     }
 
     var parts = [];
     if (c.order) parts.push('顺序');
+    if (c.tagOrder) parts.push('标签顺序');
     if (c.tags.length) parts.push('标签');
     if (c.hidden.length) parts.push('公开状态');
     var message = '批量编辑：' + parts.join(' + ');
@@ -851,11 +970,12 @@
     // 顺序先记进 state.order：commit() 里会按它重排一次，
     // 不先写进去的话，刚拖好的顺序会被旧 ids 排回原样。
     var ids = currentIds();
-    state.order = { ids: ids };
+    var tags = (state.tagOrder || []).slice();
+    state.order = { ids: ids, tags: tags };
 
     var jobs = [];
     if (c.tags.length || c.hidden.length) jobs.push(function () { return commit(message); });
-    if (c.order) jobs.push(function () { return commitOrder(message, ids); });
+    if (c.order || c.tagOrder) jobs.push(function () { return commitOrder(message, ids, tags); });
 
     var btn = $('#btn-batch-save');
     btn.disabled = true;
@@ -867,6 +987,7 @@
       .then(function () {
         state.batch = false;
         state.batchBaseline = null;
+        state.batchBaselineTags = [];
         state.batchSnapshot = null;
         renderList();
         toast('已保存 ' + parts.join(' + ') + '，网站约 1 分钟后更新');
@@ -885,11 +1006,15 @@
       });
   }
 
-  /* 只写 data/order.json */
-  function commitOrder(message, ids) {
+  /* 只写 data/order.json。
+     两个字段都写全：文章顺序 ids + 标签顺序 tags。
+     ⚠️ 即使这次只动了其中一个，也要把另一个原样带上 —— 覆盖式写入，
+         漏掉谁就等于把谁清空了。 */
+  function commitOrder(message, ids, tags) {
+    var payload = { ids: ids, tags: tags || [] };
     var body = {
       message: message,
-      content: b64encode(JSON.stringify({ ids: ids }, null, 2) + '\n'),
+      content: b64encode(JSON.stringify(payload, null, 2) + '\n'),
       branch: CFG.branch || 'main'
     };
     if (state.orderSha) body.sha = state.orderSha;
@@ -901,15 +1026,19 @@
   }
 
   /* ======================================================================
-     标签总览：全局改名 / 合并 / 移除
+     标签总览：全局改名 / 合并 / 移除 + 拖动排序
      ----------------------------------------------------------------------
      一篇一篇地改标签，改到第十篇就会开始漏。这里按「标签」列出来，
      改一次就作用到所有文章（含未公开的）。
-     结果先落在 state.posts 上，回列表点「保存全部改动」才真正提交。
+     结果先落在 state.posts / state.tagOrder 上，回列表点「保存全部改动」才真正提交。
+
+     这里的先后就是**首页标签栏的先后**（存进 order.json 的 tags），
+     所以按住左边的把手拖动即可，跟文章列表拖拽是同一套实现。
      ====================================================================== */
 
   function openTagOverview() {
-    state.tagEdit = tagStats(state.posts).list.map(function (t) {
+    // 进来时的顺序 = 当前显示顺序（拖过的按拖的来，没拖过的按出现次数）
+    state.tagEdit = tagOrderList().map(function (t) {
       return { from: t, to: t };
     });
     renderTagEditList();
@@ -921,8 +1050,17 @@
     var count = tagStats(state.posts).count;
 
     $('#tags-empty').hidden = rows.length > 0;
-    $('#tag-edit-list').innerHTML = rows.map(function (r, i) {
-      return '<li data-i="' + i + '">' +
+    $('#tag-edit-list').innerHTML = rows.map(function (r) {
+      return '<li data-from="' + esc(r.from) + '">' +
+        // 把手：手指按住它才能拖（CSS 里 touch-action:none，不会变成滚页面）；
+        // 鼠标则整行可拖。跟文章列表左侧那个序号是同一个角色。
+        '<span class="tag-grip" title="按住拖动，调整首页标签栏里的先后"' +
+          ' aria-label="拖动调整标签顺序">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+          '<circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>' +
+          '<circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>' +
+          '<circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>' +
+          '</svg></span>' +
         '<span class="tag-from">' + esc(r.from) +
           '<span class="tag-count">' + (count[r.from] || 0) + ' 篇</span></span>' +
         '<input class="tag-to" type="text" maxlength="' + MAX_TAG_LEN + '"' +
@@ -934,19 +1072,23 @@
     renderTagsSummary();
   }
 
-  /* 读一遍输入框（还没点「应用到列表」） */
+  /* 读一遍列表当前的样子（还没点「应用到列表」）。
+     ⚠️ 认的是 DOM 上的 data-from，不是 state.tagEdit 的下标 ——
+        拖过之后 DOM 顺序跟 state.tagEdit 就不一样了，按下标读会张冠李戴。 */
   function readTagEdit() {
-    var inputs = $('#tag-edit-list').querySelectorAll('input.tag-to');
+    var items = $('#tag-edit-list').querySelectorAll('li');
     var out = [];
-    for (var i = 0; i < inputs.length; i++) {
+    for (var i = 0; i < items.length; i++) {
+      var input = items[i].querySelector('input.tag-to');
       out.push({
-        from: (state.tagEdit && state.tagEdit[i] ? state.tagEdit[i].from : ''),
-        to: inputs[i].value.trim().replace(/^#/, '')
+        from: items[i].getAttribute('data-from') || '',
+        to: input ? input.value.trim().replace(/^#/, '') : ''
       });
     }
     return out;
   }
 
+  /* 有没有还没应用的改名 / 移除（拖动顺序不算 —— 那个是立刻生效的） */
   function tagsDirty() {
     return readTagEdit().some(function (r) { return r.to !== r.from; });
   }
@@ -956,15 +1098,22 @@
     if (!box) return;
 
     var changed = readTagEdit().filter(function (r) { return r.to !== r.from; });
-    if (!changed.length) { box.hidden = true; box.textContent = ''; return; }
+    var parts = [];
 
-    var names = changed.slice(0, 3).map(function (r) {
-      return r.to ? ('「' + r.from + '」→「' + r.to + '」') : ('移除「' + r.from + '」');
-    });
-    if (changed.length > 3) names.push('等 ' + changed.length + ' 个');
+    if (changed.length) {
+      var names = changed.slice(0, 3).map(function (r) {
+        return r.to ? ('「' + r.from + '」→「' + r.to + '」') : ('移除「' + r.from + '」');
+      });
+      if (changed.length > 3) names.push('等 ' + changed.length + ' 个');
+      parts.push(names.join('，'));
+    }
+    if (tagOrderDirty()) parts.push('标签顺序调过了');
+
+    if (!parts.length) { box.hidden = true; box.textContent = ''; return; }
 
     box.hidden = false;
-    box.textContent = '待应用：' + names.join('，') + '。回到列表点「保存全部改动」才提交。';
+    box.textContent = '待保存：' + parts.join('；') +
+      '。回到列表点「保存全部改动」才提交。';
   }
 
   /* 一次性作用到所有文章。⚠️ 必须同时改，不能一个一个串着改 ——
@@ -1007,6 +1156,19 @@
       hit++;
       p.tags = next;                            // 一个不剩也留空数组，字段顺序不变
     });
+
+    // 标签顺序里记的是**改名之前**的名字，得跟着一起挪过去，
+    // 否则 order.json 里会留下几个已经不存在的标签。
+    var seenOrder = Object.create(null);
+    var nextOrder = [];
+    (state.tagOrder || []).forEach(function (t) {
+      var mapped = Object.prototype.hasOwnProperty.call(map, t) ? map[t] : t;
+      if (!mapped) return;                      // 这个标签被移除了
+      if (seenOrder[mapped]) return;            // 两个并成一个，只留一个
+      seenOrder[mapped] = true;
+      nextOrder.push(mapped);
+    });
+    state.tagOrder = nextOrder;
 
     state.tagEdit = null;
     renderList();
@@ -1545,6 +1707,9 @@
     });
     $('#btn-batch-save').addEventListener('click', saveBatch);
     $('#btn-batch-cancel').addEventListener('click', cancelBatch);
+
+    /* ---------- 拖拽排序（文章列表 + 标签总览） ---------- */
+    registerDragZones();
     initDrag();
 
     /* ---------- 标签总览 ---------- */

@@ -71,6 +71,20 @@
   <article class="post-body" id="post-body"></article>
 
   <div class="post-tags" id="post-tags"></div>
+
+  <!-- 分享：一键把这篇的网址复制走。默认藏起来，JS 找到文章后再显示 -->
+  <div class="post-share" id="post-share" hidden>
+    <button class="share-btn" id="btn-share" type="button"
+            aria-label="复制这篇文章的网址">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
+        <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>
+      </svg>
+      <span class="share-text">复制链接</span>
+    </button>
+  </div>
+
   <nav class="post-nav" id="post-nav"></nav>
 </main>
 
@@ -84,6 +98,9 @@
     </div>
   </div>
 </footer>
+
+<!-- 提示条：复制链接成功 / 失败都走它，2 秒多自己消失 -->
+<div class="toast" id="toast"></div>
 
 <script src="assets/js/markdown.js"></script>
 <script src="assets/js/site.js"></script>

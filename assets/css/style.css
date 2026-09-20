@@ -618,6 +618,43 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   gap: 8px;
 }
 
+/* ---------- 分享：复制文章链接 ---------- */
+/* 放在正文（含标签）之后、上一篇/下一篇之前 —— 读完正文就该看到它 */
+.post-share {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+}
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 22px;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease,
+              border-color .18s ease, transform .18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.share-btn svg { width: 16px; height: 16px; flex: none; }
+.share-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+.share-btn:active { transform: scale(.97); }
+/* 复制成功的那一下：变成实心主题色，和同时弹出的提示条呼应 */
+.share-btn.done {
+  color: var(--bg-elev);
+  background: var(--accent);
+  border-color: transparent;
+}
+
 .post-nav {
   margin-top: 30px;
   display: grid;
@@ -735,6 +772,32 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
 .to-top:hover { color: var(--accent); border-color: var(--accent-line); }
 .to-top svg { width: 17px; height: 17px; }
+
+/* ---------- 提示条 ---------- */
+/* 前台目前只有「复制链接」用得上它。写作台也加载这份样式 ——
+   admin.css 里只留一条 bottom 覆盖（那边底部有固定的操作条，得抬高一点），
+   其余全部复用这里，免得两边慢慢长得不一样。 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translate(-50%, 16px);
+  z-index: 70;
+  max-width: calc(100vw - 40px);
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  color: #fff;
+  background: #2b2723;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transition: all .28s cubic-bezier(.34, 1.4, .64, 1);
+  pointer-events: none;      /* 只是看一眼，别挡住底下的链接 */
+}
+html[data-theme="dark"] .toast { background: #efe9e0; color: #1b1917; }
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+.toast.err { background: #b3261e; color: #fff; }
 
 /* ---------- 入场动画 ---------- */
 .reveal { opacity: 0; transform: translateY(14px); }

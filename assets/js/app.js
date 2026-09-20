@@ -11,9 +11,17 @@
   /* 自定义顺序（可选）。文件不存在就当成没有，退化成「按日期降序」 */
   var ORDER_URL = 'data/order.json';
 
+  /* order.json 里记的标签先后。空数组 = 没排过，标签按「第一次出现」的先后。
+     在 loadPosts() 里填。 */
+  var ORDER_TAGS = [];
+
   /* 与 write.config.js 里的 defaultAuthor 保持一致。
      卡片上只在作者跟它不一样时才显示作者，免得每张卡片都在重复同一行字。 */
   var DEFAULT_AUTHOR = 'Ever Eternity';
+
+  /* 复制链接时要给出「正式地址」，不能是 file:// 或者本地调试的 localhost。
+     和页面里 og:url 那几处写的是同一个地址。 */
+  var SITE_ORIGIN = 'https://evereternity123.github.io';
 
   var POSTS = [];
 
@@ -55,6 +63,24 @@
     return null;
   }
 
+  /* 「几分钟」说的是**阅读时长**，不是别的。
+     算法在 markdown.js：去掉代码块、按每分钟 350 字估算，至少 1 分钟。
+     卡片和文章页都走这两个函数，口径不会跑偏。 */
+  function readMinutes(content) { return MD.readingTime(content); }
+
+  /* 卡片上地方小，只写「约 N 分钟」 */
+  function readingShort(content) {
+    return '约 ' + readMinutes(content) + ' 分钟';
+  }
+
+  /* 文章页要写清楚，别让人猜「几分钟」是什么 */
+  function readingLong(content) {
+    return '约 ' + readMinutes(content) + ' 分钟读完';
+  }
+
+  /* 阅读时长那行文字的悬停说明 */
+  var READING_HINT = '按每分钟 350 字估算的阅读时长';
+
   function postUrl(id) { return 'post.html?p=' + encodeURIComponent(id); }
 
   function param(name) {
@@ -70,6 +96,9 @@
         seen[t]++;
       });
     });
+    // 写作台里拖过的标签顺序优先（order.json 的 tags）；
+    // 没排过的保持「第一次出现」的先后，排在后面
+    if (window.EE_ORDER) out = window.EE_ORDER.sortTags(out, ORDER_TAGS);
     return { list: out, count: seen };
   }
 
@@ -89,7 +118,10 @@
       var list = both[0], order = both[1];
       if (!Array.isArray(list)) throw new Error('数据格式不对');
       var ord = window.EE_ORDER;
-      if (ord) return ord.apply(list, ord.idsOf(order));
+      if (ord) {
+        ORDER_TAGS = ord.tagsOf(order);           // 标签先后，给 allTags() 用
+        return ord.apply(list, ord.idsOf(order));
+      }
       // order.js 没加载上也不至于开天窗：退回按日期降序
       return list.slice().sort(function (a, b) {
         return String(b.date).localeCompare(String(a.date));
@@ -145,7 +177,7 @@
         '<div class="post-meta">' +
           '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
           '<span class="dot"></span>' +
-          '<span>' + MD.readingTime(p.content) + ' 分钟</span>' +
+          '<span title="' + READING_HINT + '">' + readingShort(p.content) + '</span>' +
           original +
           author +
           (tags ? '<span class="dot"></span>' + tags : '') +
@@ -196,6 +228,81 @@
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
+  }
+
+  /* ---------- 提示条 ---------- */
+  /* 跟写作台那个 .toast 长得一样（样式在 style.css 里，写作台另有一处抬高位置的覆盖）。
+     同一条提示连着弹两次时重置计时器，不会出现「第二次一闪就没」。 */
+  var toastTimer = null;
+
+  function toast(msg, isError) {
+    var el = $('#toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.toggle('err', !!isError);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+
+  /* ---------- 复制文章链接 ---------- */
+  /* 给出「正式地址」。本地双击打开时 location.origin 是 null、起本地服务时是
+     localhost —— 都不该被复制出去，所以退回站点域名。 */
+  function shareUrl(id) {
+    var base = (location.protocol === 'file:' || /^(localhost|127\.|\[::1\])/.test(location.hostname))
+      ? SITE_ORIGIN + '/post.html'
+      : location.origin + location.pathname;
+    return base + '?p=' + encodeURIComponent(id);
+  }
+
+  /* 剪贴板 API 要求安全上下文（https 或 localhost）。
+     本地双击打开是 file://，navigator.clipboard 直接不存在，
+     所以留一条 textarea + execCommand 的老路兜底。 */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) resolve(); else reject(new Error('浏览器不让复制'));
+    });
+  }
+
+  function initShare(post) {
+    var box = $('#post-share');
+    var btn = $('#btn-share');
+    if (!box || !btn || !post) return;
+
+    var label = $('.share-text', btn);
+    var resetTimer = null;
+
+    btn.addEventListener('click', function () {
+      copyText(shareUrl(post.id)).then(function () {
+        toast('已复制网页链接');
+        // 按钮自己也变一下，光标不在提示条附近时也看得到反馈
+        if (!label) return;
+        label.textContent = '已复制';
+        btn.classList.add('done');
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(function () {
+          label.textContent = '复制链接';
+          btn.classList.remove('done');
+        }, 1800);
+      }).catch(function () {
+        toast('复制失败，长按地址栏手动复制吧', true);
+      });
+    });
+
+    box.hidden = false;
   }
 
   /* ---------- 首页 ---------- */
@@ -286,7 +393,13 @@
     $('#post-title').textContent = post.title;
     $('#post-date').textContent = fmtDate(post.date, 'long');
     $('#post-author').textContent = authorOf(post);
-    $('#post-time').textContent = MD.readingTime(post.content) + ' 分钟';
+
+    // 写清楚这是**阅读时长**，不是「几分钟前发布」之类的意思
+    var timeEl = $('#post-time');
+    if (timeEl) {
+      timeEl.textContent = readingLong(post.content);
+      timeEl.title = READING_HINT;
+    }
 
     // 自己写的标「原创」，和列表卡片上是同一个判据
     var originalEl = $('#post-original');
@@ -316,6 +429,9 @@
                MD.escape(t) + '</a>';
       }).join('');
     }
+
+    // 正文底部的「复制链接」。放在上一篇/下一篇之前 —— 读完正文就该看到它
+    initShare(post);
 
     bodyEl.innerHTML = MD.render(post.content);
 

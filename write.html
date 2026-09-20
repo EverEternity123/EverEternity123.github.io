@@ -130,7 +130,8 @@
         <span class="hint-coarse"><b>按住左边的序号拖</b>调顺序，也可以用
           <b>↑</b> <b>↓</b> 置顶。标签点 <b>×</b> 删掉、在「＋标签」里回车加上；
           右边按钮切换公开 / 隐藏。改完点「保存全部改动」。</span>
-        <span class="batch-tip">新发的文章不用管，它会自动排在所有文章最前面。</span>
+        <span class="batch-tip">新发的文章不用管，它会自动排在所有文章最前面。
+          想调首页标签栏里标签的先后，点「标签总览」拖。</span>
       </div>
       <div class="batch-ops">
         <button class="btn" id="btn-batch-tags">标签总览</button>
@@ -307,7 +308,7 @@
     </div>
   </section>
 
-  <!-- ================= 标签总览：全局改名 / 合并 / 移除 ================= -->
+  <!-- ================= 标签总览：拖动排序 + 全局改名 / 合并 / 移除 ================= -->
   <section id="view-tags" hidden>
     <div class="admin-bar">
       <button class="btn btn-ghost" id="btn-tags-back">← 回到文章列表</button>
@@ -316,11 +317,11 @@
       </div>
     </div>
 
-    <p class="lead">改这里的名字会<b>一次性改掉所有文章</b>上的这个标签
-      （包括未公开的）。改成另一个已有标签的名字就是<b>合并</b>，
-      留空就是<b>从所有文章上移除</b>。<br>
-      点「应用到列表」后会立刻反映到文章列表里，但<b>还没有提交</b> ——
-      回到列表点「保存全部改动」才算数。</p>
+    <p class="lead"><b>按住左边的把手拖动</b>就能调整标签的先后 ——
+      这个顺序就是首页标签栏和归档标签云里的顺序。<br>
+      改名字会<b>一次性改掉所有文章</b>上的这个标签（包括未公开的）：
+      改成另一个已有标签的名字就是<b>合并</b>，留空就是<b>从所有文章上移除</b>。<br>
+      改完点「应用到列表」，再回到列表点「保存全部改动」才真正提交。</p>
 
     <ul class="tag-edit-list" id="tag-edit-list"></ul>
     <div class="empty-note" id="tags-empty" hidden>还没有任何标签。</div>

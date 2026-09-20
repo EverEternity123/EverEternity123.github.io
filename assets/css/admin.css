@@ -281,26 +281,10 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 }
 
 /* ---------- 提示条 ---------- */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 108px;
-  transform: translate(-50%, 16px);
-  z-index: 70;
-  max-width: calc(100vw - 40px);
-  padding: 11px 20px;
-  border-radius: 999px;
-  font-size: 14.5px;
-  color: #fff;
-  background: #2b2723;
-  box-shadow: var(--shadow);
-  opacity: 0;
-  visibility: hidden;
-  transition: all .28s cubic-bezier(.34, 1.4, .64, 1);
-}
-html[data-theme="dark"] .toast { background: #efe9e0; color: #1b1917; }
-.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
-.toast.err { background: #b3261e; color: #fff; }
+/* 外观整套在 style.css 里（前台「复制链接」用的是同一个）。
+   这里只抬高位置：写作台底部有一条固定的「保存并发布」操作条，
+   提示条停在默认的 34px 会被它挡住。 */
+.toast { bottom: 108px; }
 
 /* ---------- 仓库信息 ---------- */
 .repo-info,
@@ -542,8 +526,10 @@ body.ee-batch .repo-strip { display: none; }
 /* 正在被拖的那一行：要让人一眼看出「拿起来了」——
    抬到最上层、套一圈主题色描边、轻微放大、换成不透明的卡片底，
    并且 pointer-events:none（这样 elementFromPoint 能"看穿"它，
-   直接命中它下面那一行） */
-.admin-list li.dragging {
+   直接命中它下面那一行）。
+   文章列表和标签总览共用这一套（拖拽实现也是同一份）。 */
+.admin-list li.dragging,
+.tag-edit-list li.dragging {
   pointer-events: none;
   position: relative;
   z-index: 5;
@@ -553,8 +539,9 @@ body.ee-batch .repo-strip { display: none; }
   transform: scale(1.015);
   transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
 }
-/* 被拖那行的序号变成主题色小徽章，拖的是哪一条一目了然 */
-.admin-list li.dragging .ord {
+/* 被拖那行的把手变成主题色小徽章，拖的是哪一条一目了然 */
+.admin-list li.dragging .ord,
+.tag-edit-list li.dragging .tag-grip {
   background: var(--accent);
   color: var(--bg-elev);
   border-radius: 6px;
@@ -562,7 +549,8 @@ body.ee-batch .repo-strip { display: none; }
   font-weight: 700;
 }
 /* 松手落位时闪一下，确认「就放这儿」 */
-.admin-list li.settled { animation: ee-settle .46s ease-out; }
+.admin-list li.settled,
+.tag-edit-list li.settled { animation: ee-settle .46s ease-out; }
 @keyframes ee-settle {
   0%   { background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent); }
   100% { background: transparent;        box-shadow: 0 0 0 2px transparent; }
@@ -690,18 +678,56 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
     -webkit-user-select: none;
   }
   body.ee-batch .admin-list li.dragging { cursor: grabbing; }
+
+  /* 标签总览：鼠标下整行都能拖（输入框除外，那是用来打字的） */
+  .tag-edit-list li {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .tag-edit-list li input {
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .tag-edit-list li.dragging { cursor: grabbing; }
 }
 
-/* ---------- 标签总览（全局改名 / 合并 / 移除） ---------- */
+/* ---------- 标签总览（拖动排序 + 全局改名 / 合并 / 移除） ---------- */
 .tag-edit-list { list-style: none; margin: 0 0 24px; padding: 0; }
 
+/* flex-wrap 是为了窄屏：把手和标签名占第一行，输入框 flex-basis:100% 自动换到第二行。
+   这样不用为了「窄屏改成一列」再套一层容器。 */
 .tag-edit-list li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
+
+/* 拖拽把手（跟文章列表左侧那个序号是同一个角色）。
+   touch-action:none 让手指按住它时不会变成滚页面，否则拖不动。 */
+.tag-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -4px;
+  border-radius: 7px;
+  color: var(--text-3);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tag-grip svg { width: 15px; height: 15px; display: block; }
+.tag-grip:active { cursor: grabbing; }
+.tag-edit-list li.dragging .tag-grip { padding: 0; }
+
 .tag-from {
   flex: 1 1 auto;
   min-width: 0;
@@ -748,7 +774,6 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
   .batch-ops { justify-content: flex-end; }
   .admin-list .ops .btn-move { padding: 8px 9px; font-size: 14px; }
 
-  /* 标签总览：标签名和输入框各占一行，输入框吃满宽度（手指好点） */
-  .tag-edit-list li { flex-direction: column; align-items: stretch; gap: 6px; }
-  .tag-edit-list input.tag-to { flex: 1 1 auto; width: 100%; }
+  /* 标签总览：把手 + 标签名占第一行，输入框换到第二行吃满宽度（手指好点） */
+  .tag-edit-list input.tag-to { flex: 1 1 100%; width: 100%; }
 }
