@@ -729,6 +729,11 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   padding-left: 14px; border-left: 3px solid var(--accent);
 }
 .about-body p { margin: 0 0 1.4em; }
+
+/* 关于页也是长文，跟文章正文一样两端对齐 —— 两边排版保持一致。
+   ⚠️ 同样只给段落和列表项，别加在整个 .about-body 上（标题折行时字距会很难看）。 */
+.about-body p,
+.about-body li { text-align: justify; }
 .about-body ul { padding-left: 1.4em; margin: 0 0 1.4em; }
 .about-body li { margin-bottom: .5em; }
 .about-body li::marker { color: var(--accent); }
