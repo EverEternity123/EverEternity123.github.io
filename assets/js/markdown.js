@@ -161,11 +161,20 @@
     return plain.slice(0, limit) + '……';
   }
 
-  /* 中文阅读时长估算（约 350 字/分钟） */
-  function readingTime(src) {
-    var plain = String(src || '').replace(/```[\s\S]*?```/g, ' ').replace(/\s+/g, '');
-    return Math.max(1, Math.round(plain.length / 350));
+  /* 正文字数：去掉代码块、去掉所有空白之后的长度。
+     ⚠️ 阅读时长就是拿它除以 350 算的 —— 两处必须走同一个函数，
+        否则「1 千字」和「约 4 分钟」会互相打架。 */
+  function charCount(src) {
+    return String(src || '').replace(/```[\s\S]*?```/g, ' ').replace(/\s+/g, '').length;
   }
 
-  global.MD = { render: render, excerpt: excerpt, readingTime: readingTime, escape: esc };
+  /* 中文阅读时长估算（约 350 字/分钟） */
+  function readingTime(src) {
+    return Math.max(1, Math.round(charCount(src) / 350));
+  }
+
+  global.MD = {
+    render: render, excerpt: excerpt, readingTime: readingTime,
+    charCount: charCount, escape: esc
+  };
 })(window);

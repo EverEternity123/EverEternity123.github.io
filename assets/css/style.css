@@ -479,7 +479,10 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 }
 .arch-item:hover { padding-left: 12px; color: var(--accent); }
 .arch-item time { flex: none; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-3); }
-.arch-item .t { font-size: 15.5px; }
+/* 标题跟首页卡片（.post-card h3）用同一套衬线体 —— 之前这里没写 font-family，
+   继承了 body 的无衬线，两种字体混着看很跳。字号保持 15.5（归档是密列表），
+   只把字重抬到 500，让它在衬线下不至于太细。 */
+.arch-item .t { font-family: var(--font-serif); font-size: 15.5px; font-weight: 500; }
 
 /* ---------- 文章详情 ---------- */
 .reading-progress {
