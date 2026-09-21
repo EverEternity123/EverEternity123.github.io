@@ -200,6 +200,20 @@ a { color: inherit; text-decoration: none; }
 html[data-theme="dark"] .theme-toggle .icon-sun  { display: block; }
 html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
+/* ---------- 站点信息加载前的遮罩 ----------
+   首页介绍、关于页正文、页脚落款都是 site.js 读完 data/site.json 才填的，
+   HTML 里那份只是兜底。改了站点信息之后兜底就跟不上了 —— 页面会先闪一下
+   旧文案，再被替换成新的（首页副标题、标签、页脚落款都会闪）。
+   所以每个前台页面的 <head> 里有一行内联脚本，赶在第一帧之前给 <html>
+   打上 .ee-site-pending 把这几块先藏住；site.js 读完（成功或失败）再摘掉。
+   用 visibility 而不是 display：位置先占住，露出来的时候不会跳版。 */
+.ee-site-pending #hero-title,
+.ee-site-pending #hero-tagline,
+.ee-site-pending #hero-chips,
+.ee-site-pending #about-sub,
+.ee-site-pending #about-body,
+.ee-site-pending #footer-note { visibility: hidden; }
+
 /* ---------- 首页 Hero ---------- */
 .hero { padding: 58px 0 34px; }
 
@@ -262,6 +276,14 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 .chip .count {
   opacity: .5; margin-left: 6px; font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+/* 归档页当前选中的标签（archive.html?tag=xxx）。
+   和首页 .tag-btn.on 用同一套观感，别让两个页面的「选中」长得不一样。 */
+.chip.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  font-weight: 500;
 }
 
 /* ---------- 通用页面标题 ---------- */

@@ -446,7 +446,7 @@
       var header = $('.post-header', wrap);
       var note = document.createElement('div');
       note.className = 'hidden-note';
-      note.innerHTML = '这篇还没公开 —— 它不会出现在首页、归档和标签里，' +
+      note.innerHTML = '这篇还没公开 —— 它不会出现在首页、全部文章和标签里，' +
                        '只有拿到这个链接才能看到。';
       if (header) wrap.insertBefore(note, header);
       else wrap.appendChild(note);
@@ -507,17 +507,46 @@
     onScroll();
   }
 
-  /* ---------- 归档页 ---------- */
+  /* ---------- 全部文章页（文件仍然叫 archive.html，改文件名会断链） ---------- */
   function initArchive() {
     var el = $('#archive-list');
     if (!el) return;
 
     var stat = $('#archive-stat');
-    var shown = visiblePosts();
+    var all = visiblePosts();
+
+    /* 归档页的标签**留在归档页**：archive.html?tag=xxx
+       （2026-09-21 用户要求）原来点标签是跳 index.html?tag=xxx，
+       于是从「只有标题的年份列表」一下子跳到「带摘要的卡片流」，
+       观感完全换了一套。归档就该一直长归档的样子。
+       用查询参数而不是纯 JS 过滤：链接能分享、能刷新、能后退。 */
+    var tag = param('tag') || '';
+    var shown = tag
+      ? all.filter(function (p) { return (p.tags || []).indexOf(tag) >= 0; })
+      : all;
+
+    /* 标签云**始终按全部可见文章**统计 —— 否则点进某个标签之后，
+       云里只剩那一个标签，就再也换不了别的了。 */
+    var cloud = $('#tag-cloud');
+    if (cloud) {
+      var t = allTags(all);
+      var chips = '<a class="chip' + (tag ? '' : ' on') + '" href="archive.html">全部' +
+                  '<span class="count">' + all.length + '</span></a>';
+      chips += t.list.map(function (x) {
+        return '<a class="chip' + (x === tag ? ' on' : '') +
+               '" href="archive.html?tag=' + encodeURIComponent(x) + '">' +
+               MD.escape(x) + '<span class="count">' + t.count[x] + '</span></a>';
+      }).join('');
+      cloud.innerHTML = chips;
+    }
 
     if (!shown.length) {
-      el.innerHTML = '<div class="empty">还没有文章。</div>';
-      if (stat) stat.textContent = '共 0 篇';
+      el.innerHTML = '<div class="empty">' +
+        (tag ? '没有标签是「' + MD.escape(tag) + '」的文章。' : '还没有文章。') +
+        '</div>';
+      if (stat) {
+        stat.textContent = tag ? '标签：' + tag + ' · 共 0 篇' : '共 0 篇';
+      }
       return;
     }
 
@@ -542,20 +571,16 @@
     }).join('');
 
     if (stat) {
-      var words = shown.reduce(function (n, p) {
-        return n + String(p.content || '').replace(/\s+/g, '').length;
-      }, 0);
-      stat.textContent = '共 ' + shown.length + ' 篇 · 约 ' +
-                         (words / 1000).toFixed(1) + ' 千字';
-    }
-
-    var cloud = $('#tag-cloud');
-    if (cloud) {
-      var t = allTags(shown);
-      cloud.innerHTML = t.list.map(function (tag) {
-        return '<a class="chip" href="index.html?tag=' + encodeURIComponent(tag) + '">' +
-               MD.escape(tag) + '<span class="count">' + t.count[tag] + '</span></a>';
-      }).join('');
+      if (tag) {
+        // 按标签筛选时只报篇数：字数统计是给「整站有多少」用的，这里意义不大
+        stat.textContent = '标签：' + tag + ' · 共 ' + shown.length + ' 篇';
+      } else {
+        var words = shown.reduce(function (n, p) {
+          return n + String(p.content || '').replace(/\s+/g, '').length;
+        }, 0);
+        stat.textContent = '共 ' + shown.length + ' 篇 · 约 ' +
+                           (words / 1000).toFixed(1) + ' 千字';
+      }
     }
   }
 
@@ -588,7 +613,9 @@
     if (window.SITE) {
       window.SITE.load().then(window.SITE.apply).catch(function (err) {
         console.warn('[app] 站点信息没读到，沿用页面里的静态内容', err);
-      });
+      }).then(window.SITE.reveal, window.SITE.reveal);
+      // ↑ 末了这一下是摘遮罩（.ee-site-pending）。**成功失败都得摘**，
+      //   否则 <head> 里藏起来的那几块就一直不露出来了。
     }
 
     loadPosts().then(function (list) {

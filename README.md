@@ -57,6 +57,8 @@
     ├── verify-hidden.py  公共页面（注入数据，最稳）：隐藏文章 + 作者 + 阅读时长 + 分享提示
     ├── verify-share.py   分享预览卡片：p/<id>.html 的 og 标签 + 渲染 + 分享地址
     ├── verify-images.py  写作台「插入图片」：真的压到 1600px + 插在光标处
+    ├── verify-inline-image.py  正文里的插图在页面上真显示得出来吗（临时副本，自己起服务）
+    ├── verify-fouc.py   站点信息会不会先闪一下旧文案（自己起服务，把 site.json 压住 2 秒）
     ├── verify-write-fields.py  写作台里作者/隐藏的读写
     ├── verify-site-and-tags.py 写作台的标签筛选 + 站点信息（假仓库跑在页面内存里）
     ├── verify-order.py   首页顺序 + 批量编辑里的排序 + 拖拽
@@ -166,6 +168,13 @@ node .tools/preview.js
 >
 > 另外：**图片本身是公开的**。隐藏文章里的图，拿到链接的人一样看得到 ——
 > 「隐藏」只挡列表和导航，不挡资源。
+
+> **怎么知道插图在页面上真的显示得出来？** 跑 `python .tools/verify-inline-image.py`。
+> 上面那些「压到 1600px / 插在光标处」都是在看**字符串**，证明不了这件事 ——
+> 中间还隔着两件容易出错的事：Markdown 渲染出来的路径对不对、`<base href="/">`
+> 会不会把 `assets/…` 带偏。任意一个错了，症状都是**页面全正常、只有图裂了**，
+> 而且要到线上才看得见。那个脚本会在临时副本里造一张真图，用浏览器渲染一遍，
+> 直接看 `naturalWidth`。
 
 ### 作者一栏
 
@@ -373,6 +382,15 @@ python .tools/build-posts.py --check    # 只比对，不写文件
 
 `data/site.json` 里任何一段留空，页面上就保持原样不替换 —— 所以就算这个文件
 丢了或者写坏了，首页和关于页也不会开天窗。
+
+> **改完之后页面上会「闪一下」吗？** 以前会。`site.js` 是**异步**读 `data/site.json`
+> 的，而 HTML 里那份兜底文案**首帧就渲染** —— 站点信息一改，兜底就跟不上真值了，
+> 于是先闪一下旧的、再被换成新的（首页副标题、标签行、关于页正文、页脚落款都会闪）。
+> 2026-09-21 已修：页面加载时先给这几块打上遮罩藏起来，`site.js` 读完（成功或失败）
+> 再露出来。用 `visibility` 不用 `display`，位置先占住，露出来时不跳版；
+> JS 被关掉或 `site.json` 读不到时照常显示兜底，不会开天窗。
+> 回归自检：`python .tools/verify-fouc.py`（它会把 `site.json` 压住 2 秒，
+> 在窗口里断言那一块是藏着的）。
 
 ---
 
@@ -668,6 +686,8 @@ python .tools/verify-batch.py           # 批量编辑：改标签 / 切隐藏 /
 python .tools/verify-tagorder.py        # 标签先后：前台标签栏跟着走 + 标签总览里拖得动
 python .tools/verify-share.py           # 分享预览卡片：每篇文章的 p/<id>.html 标题/缩略图对不对
 python .tools/verify-images.py          # 写作台插图：压缩后真变小了 + 插在光标处 + 算进草稿
+python .tools/verify-inline-image.py    # 正文插图真显示得出来（自己起服务，不用先跑 preview.js）
+python .tools/verify-fouc.py            # 站点信息会不会先闪一下旧文案（把 site.json 压住 2 秒再断言）
 python .tools/verify-mobile-padding.py  # 手机端正文左右留白够不够
 python .tools/verify-looks.py           # 头像/图标/og 缩略图有没有真的加载出来
 python .tools/verify-local-file.py      # 本地双击打开 write.html 能不能用（两段）

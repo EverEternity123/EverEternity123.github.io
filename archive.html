@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>归档 · Ever Eternity</title>
-<meta name="description" content="Ever Eternity 博客的全部文章归档。">
+<title>全部文章 · Ever Eternity</title>
+<meta name="description" content="Ever Eternity 博客的全部文章，按年份排好。">
 <meta name="theme-color" content="#faf7f2">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon-16.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Ever Eternity">
-<meta property="og:title" content="归档 · Ever Eternity">
-<meta property="og:description" content="Ever Eternity 博客的全部文章归档。">
+<meta property="og:title" content="全部文章 · Ever Eternity">
+<meta property="og:description" content="Ever Eternity 博客的全部文章，按年份排好。">
 <meta property="og:image" content="https://evereternity123.github.io/assets/img/og-image.jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -28,6 +28,21 @@
   } catch (e) { /* ignore */ }
 })();
 </script>
+<script>
+(function () {
+  // 站点信息（首页介绍 / 关于页正文 / 页脚落款）是 site.js 读完 data/site.json
+  // 才填的，HTML 里那份只是兜底。不先藏起来的话，会先闪一下兜底的旧文案，
+  // 再被替换成新的（副标题、标签、页脚都会闪）。放 <head> 里是为了赶在
+  // 第一帧之前打上标记；site.js 读完（成功或失败）会摘掉它。
+  // JS 被关掉时这几行不会执行，页面照常显示兜底内容，不会开天窗。
+  try { document.documentElement.classList.add('ee-site-pending'); } catch (e) { /* ignore */ }
+  // 万一 site.js / app.js 没跑起来，3 秒后也强制露出来 ——
+  // 宁可看到兜底的旧文案，也不能让这一块一直空着。
+  setTimeout(function () {
+    try { document.documentElement.classList.remove('ee-site-pending'); } catch (e) { /* ignore */ }
+  }, 3000);
+})();
+</script>
 </head>
 <body>
 
@@ -39,7 +54,7 @@
     </a>
     <nav class="nav">
       <a href="index.html">首页</a>
-      <a href="archive.html">归档</a>
+      <a href="archive.html">全部文章</a>
       <a href="about.html">关于</a>
       <button class="theme-toggle" type="button" aria-label="切换主题">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -51,7 +66,7 @@
 
 <main class="wrap-narrow">
   <div class="page-head">
-    <h1>归档</h1>
+    <h1>全部文章</h1>
     <p class="sub" id="archive-stat"></p>
   </div>
 
@@ -65,7 +80,7 @@
     <div id="footer-note">© 2026 Ever Eternity · 慢慢写，慢慢活</div>
     <div class="footer-links">
       <a href="index.html">首页</a>
-      <a href="archive.html">归档</a>
+      <a href="archive.html">全部文章</a>
       <a href="about.html">关于</a>
     </div>
   </div>

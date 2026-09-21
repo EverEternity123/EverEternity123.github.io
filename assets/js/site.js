@@ -82,5 +82,15 @@
     }
   }
 
-  global.SITE = { load: load, apply: apply, aboutBodyHTML: aboutBodyHTML };
+  /* 摘掉 <head> 里那行内联脚本打上的遮罩（.ee-site-pending，规则在 style.css）。
+     站点信息填完了要摘，**没读到也要摘** —— 否则首页介绍、关于页正文、页脚
+     会一直空着。读不到时就沿用 HTML 里写死的兜底内容，跟以前一样。 */
+  function reveal() {
+    try {
+      document.documentElement.classList.remove('ee-site-pending');
+    } catch (e) { /* ignore */ }
+  }
+
+  global.SITE = { load: load, apply: apply, reveal: reveal,
+                  aboutBodyHTML: aboutBodyHTML };
 })(window);
