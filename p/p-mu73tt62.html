@@ -76,9 +76,15 @@
 </header>
 
 <main class="wrap-narrow post-page" id="post-main">
-  <a class="back-link" href="index.html">
+  <!-- 「返回」＝回到你来的那一页（首页 / 全部文章页，连标签筛选和滚动位置一起还回来）。
+       没有来路时退回 index.html —— href 就是那层兜底，JS 挂了也能用。
+       逻辑在 assets/js/app.js 的 initBack()。
+       ⚠️ 这个注释里**一个旧词都不能留**：check-content.js 有一条断言，
+          任何 .html 里出现那个已被替换掉的旧导航名就算「旧词泄漏」
+          （页面上的入口早改叫「全部文章」了）。 -->
+  <a class="back-link" id="back-link" href="index.html">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-    返回首页
+    返回
   </a>
 
   <header class="post-header">

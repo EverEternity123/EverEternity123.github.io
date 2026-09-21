@@ -246,6 +246,77 @@
     onScroll();
   }
 
+  /* ---------- 返回：回到**你来的那一页**，而不是无脑回首页 ---------- */
+  /* 2026-09-21 用户要求：文章页左上角那个按钮改叫「返回」，
+     而且要**停在原来那个标签 / 那个滚动位置**，别一按就回到干干净净的首页。
+
+     分两半做：
+
+     1）能回就回 —— `document.referrer` 是本站的（＝从首页 / 归档页点进来的），
+        就 `history.back()`。这样 `index.html?tag=随笔` 那层筛选状态原样回来。
+        没有来路（直接打开、从微信点进来、分享卡片点进来）才退回 `index.html`
+        —— 也就是 `<a href="index.html">` 那层兜底，JS 挂了也照样能用。
+
+     2）滚动位置自己记 —— 列表是 JS 渲染的，浏览器自带的「后退恢复滚动位置」
+        **赶在列表渲染完成之前就执行了**，结果永远是白恢复（回到顶部）。
+        所以列表页把 `history.scrollRestoration` 关掉，改成：点卡片进文章之前
+        把位置写进 sessionStorage，列表渲染完再还回去。
+
+     用 sessionStorage 不用 localStorage：一个标签页一份，
+     新开一个标签页看首页不会莫名其妙滚到中间。 */
+  var LIST_POS_KEY = 'ee-list-scroll';
+
+  /* 当前这页是不是「有文章列表的页」（首页 / 归档页） */
+  function isListPage() {
+    return !!(document.getElementById('post-list') ||
+              document.getElementById('archive-list'));
+  }
+
+  function rememberListPos() {
+    try {
+      sessionStorage.setItem(LIST_POS_KEY, String(window.pageYOffset || 0));
+    } catch (e) { /* 隐私模式 / 禁用存储时忽略，顶多是不记 */ }
+  }
+
+  function restoreListPos() {
+    // ⚠️ 文章页绝不能消费这个 key —— 消费了就白记了，返回时找不回来
+    if (!isListPage()) return;
+    var v = null;
+    try {
+      v = sessionStorage.getItem(LIST_POS_KEY);
+      sessionStorage.removeItem(LIST_POS_KEY);   // 只还一次，别赖着
+    } catch (e) { return; }
+    if (v === null) return;
+    var y = parseInt(v, 10);
+    if (!isFinite(y) || y <= 0) return;
+    // 等一帧：列表是刚 innerHTML 进去的，得先完成布局才有得滚
+    requestAnimationFrame(function () { window.scrollTo(0, y); });
+  }
+
+  /* 来路是不是本站？不是的话就走 href 兜底，别 history.back() 把人家送出站 */
+  function cameFromThisSite() {
+    if (history.length < 2) return false;
+    var ref = document.referrer || '';
+    if (!ref) return false;
+    try {
+      return new URL(ref).origin === location.origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function initBack() {
+    var link = document.getElementById('back-link');
+    if (!link) return;
+    link.addEventListener('click', function (e) {
+      // 中键 / Ctrl+点击 / Shift+点击 = 「在新窗口打开」，别拦人家
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+      if (!cameFromThisSite()) return;   // 没来路 → 走 href="index.html"
+      e.preventDefault();
+      history.back();
+    });
+  }
+
   /* ---------- 提示条 ---------- */
   /* 跟写作台那个 .toast 长得一样（样式在 style.css 里，写作台另有一处抬高位置的覆盖）。
      同一条提示连着弹两次时重置计时器，不会出现「第二次一闪就没」。 */
@@ -368,11 +439,18 @@
       tagbarEl.addEventListener('click', function (e) {
         var btn = e.target.closest('.tag-btn');
         if (!btn) return;
-        state.tag = btn.getAttribute('data-tag');
-        Array.prototype.forEach.call(tagbarEl.children, function (b) {
-          b.classList.toggle('on', b === btn);
-        });
+        setTag(btn.getAttribute('data-tag'));
         render();
+      });
+    }
+
+    /* 选中某个标签（'' = 全部）。按名字切，不按按钮对象 —— 这样从地址栏
+       恢复状态时也能直接调，不必伪造一次 click。 */
+    function setTag(t) {
+      state.tag = t || '';
+      if (!tagbarEl) return;
+      Array.prototype.forEach.call(tagbarEl.children, function (b) {
+        b.classList.toggle('on', b.getAttribute('data-tag') === state.tag);
       });
     }
 
@@ -381,6 +459,26 @@
         state.q = searchEl.value.trim().toLowerCase();
         render();
       });
+    }
+
+    /* 把当前的筛选状态写进地址栏。
+       ⚠️ **这一步不能省**：`post.html` 上的「返回」走的是 `history.back()`，
+          回到的是**地址栏里那个 URL**。不写的话：
+            · 点标签按钮（URL 不带 ?tag=）→ 进文章 → 返回 = 标签白点了，回到全部
+            · 搜索 → 进文章 → 返回 = 搜索框里字还在（浏览器会恢复表单值），
+              但列表已经是全部 —— 界面在撒谎，最误导
+          （2026-09-21 实测两个都踩到，所以有了这个函数。）
+
+       用 `replaceState` 不用 `pushState`：pushState 会让每点一次标签就多一条历史，
+       于是「返回」得按好几次才回得到文章。replaceState 只改当前这条，
+       「返回」一步到位。顺带把 URL 变成可分享 / 可刷新的 —— 和全部文章页
+       （archive.html?tag=xxx）保持同一套做法。 */
+    function syncUrl() {
+      var qs = [];
+      if (state.tag) qs.push('tag=' + encodeURIComponent(state.tag));
+      if (state.q) qs.push('q=' + encodeURIComponent(state.q));
+      var url = location.pathname + (qs.length ? '?' + qs.join('&') : '') + location.hash;
+      try { history.replaceState(null, '', url); } catch (e) { /* file:// 下可能受限 */ }
     }
 
     function match(p) {
@@ -392,6 +490,7 @@
     }
 
     function render() {
+      syncUrl();
       var result = shown.filter(match);
       if (!result.length) {
         listEl.innerHTML = shown.length
@@ -402,6 +501,23 @@
       }
       listEl.innerHTML = result.map(cardHTML).join('');
       observeReveal();
+    }
+
+    /* 从地址栏恢复筛选状态（?tag=xxx&q=xxx）。
+       两个都要**先设进 state、再统一 render 一次** —— 分两次 render 的话，
+       第一次 render 里的 syncUrl() 会把「还没恢复的那个参数」从地址栏抹掉。
+       （首页带 ?tag= 的入口：文章页底部的标签胶囊，见 initPost 里的 post-tags） */
+    var urlTag = param('tag');
+    if (urlTag && tagbarEl &&
+        tagbarEl.querySelector('.tag-btn[data-tag="' + urlTag.replace(/"/g, '\\"') + '"]')) {
+      setTag(urlTag);
+    }
+    if (searchEl) {
+      var urlQ = param('q');
+      if (urlQ) searchEl.value = urlQ;
+      // 浏览器恢复表单值时**不会触发 input 事件**，所以 state.q 必须自己再读一遍，
+      // 否则「搜索 → 进文章 → 返回」会看到：搜索框里字还在、列表却是全部（踩过）
+      state.q = searchEl.value.trim().toLowerCase();
     }
 
     render();
@@ -589,16 +705,6 @@
     }
   }
 
-  /* ---------- 首页支持 ?tag=xxx ---------- */
-  function applyTagFromUrl() {
-    var tag = param('tag');
-    if (!tag) return;
-    var bar = $('#tagbar');
-    if (!bar) return;
-    var target = bar.querySelector('.tag-btn[data-tag="' + tag.replace(/"/g, '\\"') + '"]');
-    if (target) target.click();
-  }
-
   /* ---------- 导航高亮 ---------- */
   function highlightNav() {
     var page = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
@@ -612,7 +718,27 @@
   document.addEventListener('DOMContentLoaded', function () {
     highlightNav();
     initToTop();
+    initBack();
     setLoading();
+
+    /* 列表页关掉浏览器自带的滚动恢复，改由我们自己记 / 自己还。
+       只对列表页关 —— 别的页面（关于页之类）还是让浏览器自己恢复更省事。 */
+    if (isListPage() && 'scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+
+    /* 点卡片进文章之前，先把当前位置记下来（卡片是动态渲染的，用事件委托） */
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('.post-card, .arch-item')) rememberListPos();
+    });
+
+    /* 从 bfcache 回来时 DOMContentLoaded **不会再跑**，得单独补一刀，
+       否则「后退」回来会停在顶部（列表还在，但滚动位置没人还）。 */
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) restoreListPos();
+    });
 
     // 站点信息（首页介绍 / 关于页 / 页脚）是独立的，文章挂了也不该连累它
     if (window.SITE) {
@@ -625,11 +751,13 @@
 
     loadPosts().then(function (list) {
       POSTS = list;
-      initIndex();
+      initIndex();     // 内部会从地址栏恢复 ?tag= / ?q=，并统一 render 一次
       initPost();
       initArchive();
-      applyTagFromUrl();
       observeReveal();
+      // ⚠️ 放在最后：等筛选状态和列表都定下来，再去还滚动位置 ——
+      //    早还的话会被后面那次 innerHTML 把位置冲掉。
+      restoreListPos();
     }).catch(showLoadError);
   });
 })();
