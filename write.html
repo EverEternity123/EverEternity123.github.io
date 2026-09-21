@@ -222,6 +222,10 @@
           插入图片
         </button>
         <span class="tool-hint" id="image-hint">照片会自动压到长边 1600px 以内再传</span>
+        <!-- 字数 / 阅读时长。数字由 admin.js 的 updateCount() 填，
+             格式走 markdown.js 的 MD.readingLabel() —— 和文章页**同一份**，别在这写死。 -->
+        <span class="tool-hint count-hint" id="f-count"
+              title="字数＝去掉代码块和空白后的正文字数；阅读时长按每分钟 350 字估算">0 字 · 约 1 分钟读完</span>
       </div>
       <textarea id="f-content" placeholder="直接写就行。
 

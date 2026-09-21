@@ -1259,6 +1259,14 @@
     return CFG.defaultAuthor || 'Ever Eternity';
   }
 
+  /* 正文的字数 / 阅读时长。走 markdown.js 的 MD.readingLabel() —— 和文章页
+     是**同一个函数**，所以编辑器里显示的数字和发布后文章页上的永远一致。
+     ⚠️ 只算 #f-content（标题、导语、标签都不算正文）。 */
+  function updateCount() {
+    var el = $('#f-count');
+    if (el) el.textContent = MD.readingLabel($('#f-content').value);
+  }
+
   function fillForm(p) {
     $('#f-title').value = p.title || '';
     $('#f-date').value = p.date || todayISO();
@@ -1267,6 +1275,7 @@
     $('#f-content').value = p.content || '';
     $('#f-author').value = p.author || '';
     $('#f-hidden').checked = p.hidden === true;
+    updateCount();
   }
 
   function readForm() {
@@ -1582,6 +1591,7 @@
         // 直接改 textarea.value 不会触发 input 事件，草稿和「有改动」得自己叫一次
         state.editing = readForm();
         scheduleDraft();
+        updateCount();
         return;
       }
       hint.textContent = '正在上传 ' + (i + 1) + ' / ' + list.length + '…';
@@ -1939,6 +1949,7 @@
         var onEdit = function () {
           state.editing = readForm();
           scheduleDraft();
+          updateCount();
         };
         el.addEventListener('input', onEdit);
         el.addEventListener('change', onEdit);

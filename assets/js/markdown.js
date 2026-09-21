@@ -173,8 +173,16 @@
     return Math.max(1, Math.round(charCount(src) / 350));
   }
 
+  /* 文章页和写作台编辑页共用的那一句：「1234 字 · 约 4 分钟读完」。
+     ⚠️ 拼串只留这一处 —— 编辑器里显示的和文章页上的必须一字不差，
+        各写一份的话迟早会分叉（比如一处改成「约 4 分钟」、另一处还是「4 分钟读完」），
+        用户会以为文章长度变了。check-content.js 有断言钉着这两处同源。 */
+  function readingLabel(src) {
+    return charCount(src) + ' 字 · 约 ' + readingTime(src) + ' 分钟读完';
+  }
+
   global.MD = {
     render: render, excerpt: excerpt, readingTime: readingTime,
-    charCount: charCount, escape: esc
+    charCount: charCount, readingLabel: readingLabel, escape: esc
   };
 })(window);

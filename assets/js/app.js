@@ -79,19 +79,17 @@
      卡片和文章页都走这两个函数，口径不会跑偏。 */
   function readMinutes(content) { return MD.readingTime(content); }
 
-  /* 正文有多少字。和阅读时长同源（markdown.js 的 charCount），
-     所以「2 千字」和「约 6 分钟」永远对得上。 */
-  function readChars(content) { return MD.charCount(content); }
-
   /* 卡片上地方小，只写「约 N 分钟」 */
   function readingShort(content) {
     return '约 ' + readMinutes(content) + ' 分钟';
   }
 
   /* 文章页地方宽裕：先报字数，再报阅读时长。
-     光写「约 N 分钟读完」看不出文章多长，前面垫一个字数就一眼有数了。 */
+     光写「约 N 分钟读完」看不出文章多长，前面垫一个字数就一眼有数了。
+     ⚠️ 拼串在 markdown.js（MD.readingLabel）—— 写作台编辑页用的是**同一个函数**，
+        这边别另写一份格式，否则编辑器里和文章页上会显示成两样。 */
   function readingLong(content) {
-    return readChars(content) + ' 字 · 约 ' + readMinutes(content) + ' 分钟读完';
+    return MD.readingLabel(content);
   }
 
   /* 阅读时长那行文字的悬停说明 */
