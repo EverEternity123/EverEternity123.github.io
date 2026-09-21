@@ -2,6 +2,7 @@
    markdown.js — 迷你 Markdown 渲染器（零依赖）
    支持：标题 / 粗体 / 斜体 / 行内代码 / 代码块 / 链接 / 图片
         引用 / 有序无序列表 / 分隔线 / 段落换行
+        **裸网址自动变链接**（直接贴 https://… 就能点，不用写成 [文字](网址)）
    用法：MD.render('## 标题\n正文')  →  HTML 字符串
    ========================================================================== */
 (function (global) {
@@ -15,22 +16,47 @@
       .replace(/"/g, '&quot;');
   }
 
-  /* 行内元素：先把行内代码抽成占位符，避免其中的符号被二次解析 */
+  /* 行内元素：先把行内代码 / 图片 / 链接抽成占位符，避免其中的符号被二次解析 */
   function inline(text) {
     var store = [];
 
-    var s = text.replace(/`([^`]+)`/g, function (_, code) {
-      store.push('<code>' + code + '</code>');
+    function hold(html) {
+      store.push(html);
       return '\u0000' + (store.length - 1) + '\u0000';
+    }
+
+    var s = text.replace(/`([^`]+)`/g, function (_, code) {
+      return hold('<code>' + code + '</code>');
     });
 
-    // 图片 ![alt](src)
-    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,
-      '<img src="$2" alt="$1" loading="lazy">');
+    /* 图片和 markdown 链接**整段**存成占位符 —— 这样下面「裸网址自动变链接」
+       就不会去动 href 里的地址（否则会套出 <a href="<a href=…"> 那种鬼东西）。 */
+    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, function (_, alt, src) {
+      return hold('<img src="' + src + '" alt="' + alt + '" loading="lazy">');
+    });
 
-    // 链接 [text](url)
-    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_, txt, url) {
+      return hold('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + txt + '</a>');
+    });
+
+    /* 裸网址自动变链接：正文里**直接贴一个网址**也能点，不用写成 [文字](网址)。
+       覆盖三种写法：① https://… ② www.… ③ 不带协议的域名（zhihu.com/xxx）。
+       ⚠️ 必须排在上面两步之后 —— 那时真链接已经换成占位符了，
+          否则会把 href 里的地址再包一层 <a>。
+       ⚠️ 结尾的中文标点不算网址（否则「……详见 https://a.com。」会把句号吞进链接）；
+          英文标点同理再剥一层（. , ; : ! ?）。
+       ⚠️ 第 ③ 种**只认常见后缀** —— 不然「3.5 版本」「2024.08」这种也会被当成网址。
+       ⚠️ 到这里文本已经过 esc()，网址里的 & 是 &amp; —— 原样放进 href 正好是对的。 */
+    s = s.replace(
+      /(https?:\/\/|www\.)[^\s<>"'()\u3000-\u303f\uff00-\uffef]+|(?:[0-9a-z][0-9a-z-]*\.)+(?:com|cn|net|org|io|dev|me|app|ai|co|cc|tv|info|top|xyz|edu|gov|club|site|blog|wiki|art)(?:\/[^\s<>"'()\u3000-\u303f\uff00-\uffef]*)?/gi,
+      function (whole) {
+        var url = whole.replace(/[.,;:!?]+$/, '');
+        var tail = whole.slice(url.length);
+        // 不带协议的要补一个，否则浏览器会当成站内相对路径
+        var href = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+        return hold('<a href="' + href + '" target="_blank" rel="noopener noreferrer">' +
+                    url + '</a>') + tail;
+      });
 
     // 粗体 **text**
     s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -38,7 +64,7 @@
     // 斜体 *text*（避免误伤 ** ）
     s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
 
-    // 还原行内代码
+    // 还原行内代码 / 图片 / 链接
     s = s.replace(/\u0000(\d+)\u0000/g, function (_, i) {
       return store[Number(i)];
     });

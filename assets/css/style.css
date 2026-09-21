@@ -167,7 +167,9 @@ a { color: inherit; text-decoration: none; }
   object-fit: cover;
 }
 
-.brand-text { font-size: 15px; }
+/* 左上角的站点名：跟首页标题（.hero h1）用**同一套衬线体**。
+   之前这里没写 font-family，继承了正文的无衬线，跟标题打架。 */
+.brand-text { font-family: var(--font-serif); font-size: 15px; }
 
 .nav { display: flex; align-items: center; gap: 4px; }
 
@@ -553,6 +555,13 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 }
 
 .post-body p { margin: 0 0 1.45em; }
+
+/* 正文两端对齐：中文排版下右侧更整齐。
+   （Chromium 对中日韩是「按字距分配」，不会像西文那样把单词之间拉出大洞。）
+   ⚠️ 只给段落和列表项 —— 标题可能折行，两端对齐会把字距拉得很怪；
+      代码块是 white-space: pre，本来就不受影响。 */
+.post-body p,
+.post-body li { text-align: justify; }
 
 .post-body h2 {
   margin: 2.2em 0 .8em;
