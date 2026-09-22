@@ -1273,6 +1273,9 @@
     $('#f-tags').value = (p.tags || []).join(', ');
     $('#f-lede').value = p.lede || '';
     $('#f-content').value = p.content || '';
+    // 换了篇文章，缓存的选区就作废了
+    sel.start = sel.end = 0;
+    paintSelHint();
     $('#f-author').value = p.author || '';
     $('#f-hidden').checked = p.hidden === true;
     updateCount();
@@ -1607,6 +1610,148 @@
     step(0);
   }
 
+  /* ======================================================================
+     正文的剪切 / 复制 / 粘贴 / 删除 / 撤销 / 重做
+     ----------------------------------------------------------------------
+     手机上长按输入框弹出来的系统菜单又长又挡字，「剪切」「删除」经常翻半天
+     找不到，所以自己给一排按钮。
+     ⚠️ 两个坑：
+       ① 点按钮时正文框会失焦，浏览器可能顺手把选区清掉 → 所以选区要**提前
+          缓存**（selectionchange 一路记着），用时再还原回去。
+       ② 删除/粘贴必须走 execCommand，不能自己拼字符串替换 value —— 自己拼
+          会绕过浏览器的撤销栈，删错了按「撤销」也回不来。
+     ====================================================================== */
+
+  // 正文框里最后一次有效选区（只在它还是焦点时更新，失焦后 selectionStart 不可信）
+  var sel = { start: 0, end: 0 };
+
+  function paintSelHint() {
+    var el = $('#sel-hint');
+    if (!el) return;
+    var n = Math.max(0, sel.end - sel.start);
+    el.textContent = n ? ('已选中 ' + n + ' 字') : '未选中文字';
+    el.classList.toggle('on', n > 0);
+  }
+
+  function rememberSel() {
+    var ta = $('#f-content');
+    if (!ta || document.activeElement !== ta) return;
+    sel.start = ta.selectionStart == null ? 0 : ta.selectionStart;
+    sel.end = ta.selectionEnd == null ? sel.start : ta.selectionEnd;
+    paintSelHint();
+  }
+
+  // 把焦点和选区还给正文框（点按钮已经把焦点抢走了）
+  function restoreSel() {
+    var ta = $('#f-content');
+    ta.focus();
+    ta.selectionStart = sel.start;
+    ta.selectionEnd = sel.end;
+    return ta;
+  }
+
+  // 改完正文要补三件事：内存副本、草稿、字数。input 事件不会自己来。
+  function afterTextEdit() {
+    state.editing = readForm();
+    scheduleDraft();
+    updateCount();
+    rememberSel();
+    paintSelHint();
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    // file:// 或老浏览器上没有 navigator.clipboard，退回老办法
+    return new Promise(function (resolve, reject) {
+      var tmp = document.createElement('textarea');
+      tmp.value = text;
+      tmp.setAttribute('readonly', '');
+      tmp.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(tmp);
+      tmp.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(tmp);
+      ok ? resolve() : reject(new Error('复制失败'));
+    });
+  }
+
+  function initTextTools() {
+    var ta = $('#f-content');
+    if (!ta || !$('#btn-cut')) return;
+
+    ['select', 'keyup', 'mouseup', 'touchend', 'input', 'focus']
+      .forEach(function (ev) { ta.addEventListener(ev, rememberSel); });
+    document.addEventListener('selectionchange', rememberSel);
+
+    function needSelection() {
+      if (sel.end > sel.start) return true;
+      toast('先选中要处理的文字', true);
+      return false;
+    }
+
+    $('#btn-cut').addEventListener('click', function () {
+      if (!needSelection()) return;
+      var text = ta.value.slice(sel.start, sel.end);
+      copyText(text).catch(function () { /* 复制失败也让删除继续，别把人卡住 */ })
+        .then(function () {
+          restoreSel();
+          document.execCommand('delete');
+          afterTextEdit();
+          toast('已剪切 ' + text.length + ' 字');
+        });
+    });
+
+    $('#btn-copy').addEventListener('click', function () {
+      if (!needSelection()) return;
+      var text = ta.value.slice(sel.start, sel.end);
+      copyText(text).then(function () {
+        toast('已复制 ' + text.length + ' 字');
+      }).catch(function () {
+        toast('复制失败，长按输入框用系统菜单试试', true);
+      });
+    });
+
+    $('#btn-paste').addEventListener('click', function () {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        toast('这个浏览器不让读剪贴板，长按输入框用系统菜单粘贴', true);
+        return;
+      }
+      navigator.clipboard.readText().then(function (text) {
+        if (!text) { toast('剪贴板是空的'); return; }
+        restoreSel();
+        document.execCommand('insertText', false, text);
+        afterTextEdit();
+        toast('已粘贴 ' + text.length + ' 字');
+      }).catch(function () {
+        toast('读不到剪贴板，长按输入框用系统菜单粘贴', true);
+      });
+    });
+
+    $('#btn-del').addEventListener('click', function () {
+      if (!needSelection()) return;
+      var n = sel.end - sel.start;
+      restoreSel();
+      document.execCommand('delete');
+      afterTextEdit();
+      toast('已删除 ' + n + ' 字');
+    });
+
+    $('#btn-undo').addEventListener('click', function () {
+      restoreSel();
+      document.execCommand('undo');
+      afterTextEdit();
+    });
+
+    $('#btn-redo').addEventListener('click', function () {
+      restoreSel();
+      document.execCommand('redo');
+      afterTextEdit();
+    });
+  }
+
   function doExport() {
     var blob = new Blob([JSON.stringify(state.posts, null, 2) + '\n'],
                         { type: 'application/json' });
@@ -1845,6 +1990,9 @@
       e.preventDefault();
       insertImages(files);
     });
+    /* ---------- 正文的剪切 / 复制 / 粘贴 / 删除 / 撤销 / 重做 ---------- */
+    initTextTools();
+
     $('#btn-refresh').addEventListener('click', refresh);
     $('#btn-export').addEventListener('click', doExport);
 

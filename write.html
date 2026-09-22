@@ -227,6 +227,21 @@
         <span class="tool-hint count-hint" id="f-count"
               title="字数＝去掉代码块和空白后的正文字数；阅读时长按每分钟 350 字估算">0 字 · 约 1 分钟读完</span>
       </div>
+
+      <!-- 手机上系统自带的文字菜单常常只给「复制/粘贴」，剪切和删除要翻二级菜单，
+           还经常被键盘顶掉 —— 所以自己给一排按钮。
+           ⚠️ 选区要**提前记下来**（点按钮时 textarea 会失焦，浏览器可能把选区清掉），
+              删除走 execCommand('delete') 以保住浏览器的撤销栈。
+           逻辑在 assets/js/admin.js 的 initTextTools()。 -->
+      <div class="editor-tools text-tools">
+        <button class="btn btn-tool" id="btn-cut" type="button">剪切</button>
+        <button class="btn btn-tool" id="btn-copy" type="button">复制</button>
+        <button class="btn btn-tool" id="btn-paste" type="button">粘贴</button>
+        <button class="btn btn-tool" id="btn-del" type="button">删除</button>
+        <span class="tool-hint sel-hint" id="sel-hint">未选中文字</span>
+        <button class="btn btn-tool" id="btn-undo" type="button">撤销</button>
+        <button class="btn btn-tool" id="btn-redo" type="button">重做</button>
+      </div>
       <textarea id="f-content" placeholder="直接写就行。
 
 ## 小标题

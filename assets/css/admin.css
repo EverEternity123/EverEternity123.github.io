@@ -172,6 +172,11 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 /* 正文字数那行推到最右边（.editor-tools 是 flex，窄屏换行后也靠右） */
 .count-hint { margin-left: auto; font-variant-numeric: tabular-nums; }
 
+/* 正文编辑按钮那排（剪切/复制/粘贴/删除 + 撤销/重做）。
+   把「已选中 N 字」推到右边，后面跟着撤销/重做。 */
+.sel-hint { margin-left: auto; font-variant-numeric: tabular-nums; }
+.sel-hint.on { color: var(--accent); }
+
 /* ---------- 顶栏 ---------- */
 .admin-bar {
   display: flex;
