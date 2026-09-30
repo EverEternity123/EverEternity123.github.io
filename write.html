@@ -184,10 +184,14 @@
       </label>
     </div>
 
-    <label class="field">
-      <span>标签（逗号分隔）</span>
+    <!-- 标签：这里是 div 不是 label —— 下面要塞一排「点一下就选上」的已有标签按钮，
+         套在 label 里的话点按钮会连带触发 label 的默认行为（把焦点抢回输入框）。
+         按钮由 assets/js/admin.js 的 renderTagPicks() 渲染。 -->
+    <div class="field">
+      <span>标签（逗号分隔，最多 8 个）</span>
       <input type="text" id="f-tags" placeholder="生活, 随笔">
-    </label>
+      <div class="tag-picks" id="tag-picks" hidden></div>
+    </div>
 
     <label class="field">
       <span>导语（可留空）</span>

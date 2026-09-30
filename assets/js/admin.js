@@ -1267,10 +1267,72 @@
     if (el) el.textContent = MD.readingLabel($('#f-content').value);
   }
 
+  /* ---------- 标签快捷按钮 ----------
+     用户 2026-09-30 提的：手打标签容易打成「随笔 」「随笔」「随笔,」好几种，
+     站点里就多出几个看着一样、其实不是一个的标签。
+     所以在输入框下面把**已经用过的标签**全列出来，点一下就选上。
+     ⚠️ 输入框始终是唯一的数据源，按钮只是它的快捷方式 ——
+        这样「手打」和「点按钮」两条路不会各存一份状态。 */
+
+  /* #f-tags 里现在的标签。跟 readForm() 同一套拆法，别再各写一份 */
+  function currentTags() {
+    return $('#f-tags').value.split(/[,，]/)
+      .map(function (t) { return t.trim(); })
+      .filter(Boolean);
+  }
+
+  /* 用代码改了表单里的值之后要补的事 —— 直接改 value 不会触发 input 事件 */
+  function afterFieldEdit() {
+    state.editing = readForm();
+    scheduleDraft();
+  }
+
+  function renderTagPicks() {
+    var box = $('#tag-picks');
+    if (!box) return;
+
+    var picked = currentTags();
+    var known = tagOrderList();   // 已有标签，按首页标签栏的显示顺序
+    // 刚手打进来、站点里还没有的新标签也要露出来 ——
+    // 否则它没有对应的按钮，看着像「这个标签没选上」
+    var extra = picked.filter(function (t) { return known.indexOf(t) === -1; });
+    var all = known.concat(extra);
+    var count = tagStats(state.posts).count;
+
+    box.hidden = all.length === 0;
+    box.innerHTML = all.map(function (t) {
+      var on = picked.indexOf(t) !== -1;
+      var n = count[t] || 0;
+      return '<button type="button" class="tag-pick' + (on ? ' on' : '') + '"' +
+        ' data-tag="' + esc(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '"' +
+        ' title="' + (n ? '已有 ' + n + ' 篇用这个标签' : '这是个新标签') + '">' +
+        esc(t) + '</button>';
+    }).join('');
+  }
+
+  /* 点一个标签按钮 = 加上 / 去掉 */
+  function togglePickedTag(tag) {
+    var picked = currentTags();
+    var i = picked.indexOf(tag);
+    if (i === -1) {
+      if (picked.length >= MAX_TAGS) {
+        toast('一篇最多 ' + MAX_TAGS + ' 个标签', true);
+        return;
+      }
+      picked.push(tag);
+    } else {
+      picked.splice(i, 1);
+    }
+    $('#f-tags').value = picked.join(', ');
+    afterFieldEdit();
+    renderTagPicks();
+  }
+
   function fillForm(p) {
     $('#f-title').value = p.title || '';
     $('#f-date').value = p.date || todayISO();
     $('#f-tags').value = (p.tags || []).join(', ');
+    renderTagPicks();
     $('#f-lede').value = p.lede || '';
     $('#f-content').value = p.content || '';
     // 换了篇文章，缓存的选区就作废了
@@ -1287,8 +1349,7 @@
       id: state.editing ? state.editing.id : '',
       title: $('#f-title').value.trim(),
       date: $('#f-date').value || todayISO(),
-      tags: $('#f-tags').value.split(/[,，]/).map(function (t) { return t.trim(); })
-              .filter(Boolean).slice(0, MAX_TAGS),
+      tags: currentTags().slice(0, MAX_TAGS),
       lede: $('#f-lede').value.trim(),
       content: $('#f-content').value,
       author: $('#f-author').value.trim(),
@@ -1650,10 +1711,10 @@
     return ta;
   }
 
-  // 改完正文要补三件事：内存副本、草稿、字数。input 事件不会自己来。
+  // 改完正文要补的事（input 事件不会自己来）。前两件跟别的字段一样，
+  // 后两件是正文特有的：字数和选区提示。
   function afterTextEdit() {
-    state.editing = readForm();
-    scheduleDraft();
+    afterFieldEdit();
     updateCount();
     rememberSel();
     paintSelHint();
@@ -2095,13 +2156,21 @@
       .forEach(function (sel) {
         var el = $(sel);
         var onEdit = function () {
-          state.editing = readForm();
-          scheduleDraft();
+          afterFieldEdit();
           updateCount();
         };
         el.addEventListener('input', onEdit);
         el.addEventListener('change', onEdit);
       });
+
+    /* ---------- 标签快捷按钮（输入框下面那排已有标签） ---------- */
+    // 手打标签时下面那排的高亮要跟着变：打了「随笔」，「随笔」那颗就该亮起来
+    $('#f-tags').addEventListener('input', renderTagPicks);
+
+    $('#tag-picks').addEventListener('click', function (e) {
+      var btn = e.target.closest('.tag-pick');
+      if (btn) togglePickedTag(btn.getAttribute('data-tag') || '');
+    });
 
     window.addEventListener('beforeunload', function (e) {
       var dirty = (!$('#view-edit').hidden && isDirty()) ||
