@@ -759,9 +759,14 @@
 
     el.innerHTML = order.map(function (y) {
       var items = groups[y].map(function (p) {
+        /* 作者 2026-10-04 加的（主人要求「每篇文章后面加上作者」）。
+           ⚠️ 这里跟首页卡片**不一样**：卡片是「跟默认署名不一样才显示作者」，
+              归档是**每篇都显示** —— 主人要的就是每行都能看到署名。
+              所以直接用 authorOf()（它自己会兜底默认作者），别用 isOriginal() 过滤。 */
         return '<a class="arch-item" href="' + postUrl(p.id) + '">' +
                  '<time datetime="' + p.date + '">' + fmtDate(p.date) + '</time>' +
                  '<span class="t">' + MD.escape(p.title) + '</span>' +
+                 '<span class="a">' + MD.escape(authorOf(p)) + '</span>' +
                '</a>';
       }).join('');
       return '<section class="year-group">' +

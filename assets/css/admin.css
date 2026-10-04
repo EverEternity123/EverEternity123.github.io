@@ -96,6 +96,14 @@
 .field-row { display: flex; gap: 12px; }
 .field-row .field { flex: 1; }
 
+/* 日期 / 作者 / 标签：一行三个（2026-10-04 主人要求）。
+   ⚠️ 窄屏也保持一行三个 —— 所以 @media (max-width:520px) 里那条
+      「.field-row 一律竖排」必须给它开个例外（见文件末尾那个媒体查询）。
+      flex-basis 给 0、min-width 给 96px：正常情况下三等分，
+      真的挤到 96px 以下才换行（而不是把输入框压成一条线）。 */
+.field-row.cols-3 { flex-wrap: wrap; }
+.field-row.cols-3 .field { flex: 1 1 0; min-width: 96px; }
+
 /* 标签那栏下面的一排「已有标签」按钮：点一下就选上，再点一下取消。
    外观跟首页标签栏（.tag-btn）是同一套语言，但小一号 —— 这里是表单里的辅助操作，
    不该抢输入框的注意力。按钮由 admin.js 的 renderTagPicks() 渲染。 */
@@ -468,18 +476,41 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
 /* 被隐藏的文章在列表里淡一点，一眼能区分 */
 .admin-list li.is-hidden .ttl { color: var(--text-2); }
 
-/* ---------- 复选框（自定义样式，原生 checkbox 藏起来） ---------- */
-.check {
+/* ---------- 开关：一排胶囊（2026-10-04 改版）----------
+   原来每个开关各占一整行、还带一段说明文字，三行下来很占地方。
+   现在只留开关本身，横向排开、放不下自动换行（以后加开关直接往 .check-row 里塞）。
+   ⚠️ 里面仍然是 <label class="check"> 包着真的 <input type="checkbox">：
+      点哪儿都能切换、键盘也能切，测试脚本的 `label.check:has(#f-hidden)` 也照样有效。
+   ⚠️ 选中态的胶囊底色用 :has() 实现（Chrome 105+ / Safari 15.4+ / Firefox 121+）。
+      如果哪天要兼容更老的浏览器，就改成 JS 在 change 时给 label 加个类。 */
+.check-row {
   display: flex;
-  align-items: flex-start;
-  gap: 11px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 4px 0 18px;
-  padding: 13px 15px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 14px 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13.5px;
+  line-height: 1.3;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.check:hover { color: var(--text-2); border-color: var(--border-2); }
+.check:has(input:checked) {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
 }
 
 .check input {
@@ -490,17 +521,17 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
 
 .check .check-box {
   flex: none;
-  width: 21px; height: 21px;
-  margin-top: 1px;
+  width: 17px; height: 17px;
+  margin-top: 0;
   border: 1.5px solid var(--border-2);
-  border-radius: 6px;
+  border-radius: 5px;
   display: grid;
   place-items: center;
   transition: background .15s, border-color .15s;
 }
 
 .check .check-box svg {
-  width: 14px; height: 14px;
+  width: 11px; height: 11px;
   color: #fff;
   opacity: 0;
   transform: scale(.6);
@@ -514,20 +545,10 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
 .check input:checked ~ .check-box svg { opacity: 1; transform: scale(1); }
 .check input:focus-visible ~ .check-box { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.check .check-text { font-size: 13.5px; line-height: 1.6; }
-.check .check-text b { display: block; font-weight: 600; color: var(--text); }
-.check .check-text em {
-  font-style: normal;
-  color: var(--text-3);
-  font-size: 12.5px;
-}
-.check .check-text code {
-  font-size: 12px;
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
+/* 说明文字 2026-10-04 撤掉了（主人要求「不需要文本解释了」），
+   现在 .check-text 只剩一个短语；原来给说明文字里 <b> / <em> / <code> 的那几条
+   样式也一并删干净了（留着就是没人用的死样式）。 */
+.check .check-text { font-size: 13.5px; }
 
 /* ---------- 批量编辑（排序 + 改标签 + 隐藏） ---------- */
 
@@ -815,6 +836,9 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
   .field-row { flex-direction: column; gap: 0; }
+  /* 日期 / 作者 / 标签 这一行**不跟着竖排**（主人 2026-10-04 要求一行三个）——
+     手机上 390px 宽也放得下（每个约 110px）。只有真的挤不下才换行。 */
+  .field-row.cols-3 { flex-direction: row; flex-wrap: wrap; gap: 12px; }
   .admin-list li { padding: 13px 2px; }
   .admin-list .ttl { font-size: 15.5px; }
 
