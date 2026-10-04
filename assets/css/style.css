@@ -563,12 +563,50 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   border-color: var(--accent-line);
 }
 
-.ai-chevron { width: 13px; height: 13px; transition: transform .2s ease; }
+.ai-chevron { width: 13px; height: 13px; transition: transform .32s cubic-bezier(.4, 0, .2, 1); }
 .ai-intro.open .ai-chevron { transform: rotate(180deg); }
 
-/* 展开后那块。用无衬线 + 比正文小一号 —— 一眼看出它不是文章正文 */
+/* 展开动画：外层是个 1 行的 grid，行高 0fr ↔ 1fr。
+   为什么用 grid 而不是 max-height / JS 量高度：
+   - max-height 得猜一个够大的值，内容短的时候前 2/3 的过渡是「白跑」的，手感发木；
+   - JS 量 scrollHeight 要在动画结束、窗口 resize、字体加载完之后各补一次，状态一多就漏。
+   grid 的 0fr→1fr 由浏览器算真实高度，一个属性搞定，也不用 innerHTML。
+   ⚠️ 内层必须 min-height:0 + overflow:hidden，否则它撑着自己的内容高度，
+      grid 行高永远压不下去（这是这套写法的经典坑）。 */
 .ai-intro-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  /* visibility 是离散属性，用 0s 过渡 + 延迟实现「收起动画播完才真正藏起来」 */
+  visibility: hidden;
+  transition: grid-template-rows .32s cubic-bezier(.4, 0, .2, 1),
+              margin-top .32s cubic-bezier(.4, 0, .2, 1),
+              opacity .32s cubic-bezier(.4, 0, .2, 1),
+              visibility 0s linear .32s;
+}
+.ai-intro.open .ai-intro-body {
+  grid-template-rows: 1fr;
   margin-top: 12px;
+  opacity: 1;
+  visibility: visible;
+  transition: grid-template-rows .32s cubic-bezier(.4, 0, .2, 1),
+              margin-top .32s cubic-bezier(.4, 0, .2, 1),
+              opacity .32s cubic-bezier(.4, 0, .2, 1),
+              visibility 0s;
+}
+
+/* grid 的那一行。⚠️ 它自己**不能有 padding** ——
+   行高是 0fr 时，item 的「最小贡献」会被自己的 padding 撑成 30px，
+   收起后就留一条看不见的空隙（实测残留正好 30px = 15px×2，踩过一次）。
+   所以 padding 只能放在再里面一层的 .ai-intro-inner 上。 */
+.ai-intro-clip {
+  min-height: 0;                  /* 见上面那条注释，缺了动画就没了 */
+  overflow: hidden;               /* 收起来时把内容裁掉，别溢出来 */
+}
+
+/* 展开后那块。用无衬线 + 比正文小一号 —— 一眼看出它不是文章正文 */
+.ai-intro-inner {
   padding: 15px 17px;
   background: var(--bg-soft);
   border-left: 3px solid var(--accent-line);
@@ -579,6 +617,12 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   line-height: 1.85;
   text-align: justify;
   white-space: pre-wrap;          /* 段落靠空行分开，不用自己拼 <p> */
+}
+
+/* 不喜欢动效的人（系统设置里关掉了），就别给他动 */
+@media (prefers-reduced-motion: reduce) {
+  .ai-intro-body { transition: none; }
+  .ai-chevron { transition: none; }
 }
 
 .back-link {

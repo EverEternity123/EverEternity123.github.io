@@ -525,7 +525,10 @@
   /* AI 摘要与评价（折叠块，**默认收起**）。
      ⚠️ 用 textContent + CSS 的 white-space:pre-wrap 渲染纯文本，**不走 MD.render** ——
         它不是用户写的正文，没必要支持 Markdown，也省得摘要里一个符号把版面搞乱。
-        textContent 顺带把 XSS 也挡掉了。 */
+        textContent 顺带把 XSS 也挡掉了。
+     展开动画在 CSS 里（.ai-intro-body 的 grid-template-rows 0fr↔1fr），
+     这里只负责翻 class 和 aria —— **别再往 body 上挂 hidden**，
+     display:none 会把过渡整个掐掉，点了就是「啪」一下出来。 */
   function initAiIntro(post) {
     var box = $('#ai-intro');
     if (!box) return;
@@ -536,14 +539,18 @@
     if (!text || post.aiOff === true) { box.remove(); return; }
 
     var btn = $('#ai-toggle');
-    var body = $('#ai-intro-body');
-    body.textContent = text;
+    var inner = $('#ai-intro-inner');
+    /* p/<id>.html 是 build-posts.py 拿 post.html 当壳生成的（静态分享页）。
+       壳一旦落后于 post.html（改完忘了重新生成），这里就取不到 ——
+       实测过一个 TypeError 会把整篇文章页干掉，变成「文章加载失败」。
+       所以宁可整块不显示，也不能让这一行把页面带走。 */
+    if (!inner) { box.remove(); return; }
+    inner.textContent = text;
     box.hidden = false;
 
     btn.addEventListener('click', function () {
       var open = btn.getAttribute('aria-expanded') === 'true';
       btn.setAttribute('aria-expanded', open ? 'false' : 'true');
-      body.hidden = open;
       box.classList.toggle('open', !open);
     });
   }

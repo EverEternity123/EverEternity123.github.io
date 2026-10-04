@@ -113,7 +113,16 @@
         <path d="M6 9l6 6 6-6"/>
       </svg>
     </button>
-    <div class="ai-intro-body" id="ai-intro-body" hidden></div>
+    <!-- 展开是靠 .ai-intro-body 的 grid-template-rows 从 0fr 过渡到 1fr（见 style.css），
+         所以这里不能再挂 hidden —— display:none 会把过渡直接掐掉。
+         真正要「藏」的是中间那层 .ai-intro-clip（min-height:0 + overflow:hidden），
+         它才是 grid 的那一行。⚠️ padding 必须放在最里面一层 .ai-intro-inner，
+         不能放在 clip 上 —— 否则行高 0 时也会被 padding 撑出 30px 的空隙。 -->
+    <div class="ai-intro-body" id="ai-intro-body">
+      <div class="ai-intro-clip">
+        <div class="ai-intro-inner" id="ai-intro-inner"></div>
+      </div>
+    </div>
   </div>
 
   <article class="post-body" id="post-body"></article>
