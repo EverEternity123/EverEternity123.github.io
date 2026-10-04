@@ -14,11 +14,11 @@
      =================================================================== -->
 <!-- EE:SEO:START -->
 <title>“大学高中化”会以一种什么方式结束？ · Ever Eternity</title>
-<meta name="description" content="查看原文 我觉得可能会以非常残酷的教育泡沫的破灭而告终，一大堆过度押注孩子的家长被一把扫荡，教育回归教育的价值本身，大学高中化无非是把不理性的对教育的过度投资继续延长、继续上杠杆，那肯……">
+<meta name="description" content="我觉得可能会以非常残酷的教育泡沫的破灭而告终，一大堆过度押注孩子的家长被一把扫荡，教育回归教育的价值本身，大学高中化无非是把不理性的对教育的过度投资继续延长、继续上杠杆，那肯定不会有啥……">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Ever Eternity">
 <meta property="og:title" content="“大学高中化”会以一种什么方式结束？">
-<meta property="og:description" content="查看原文 我觉得可能会以非常残酷的教育泡沫的破灭而告终，一大堆过度押注孩子的家长被一把扫荡，教育回归教育的价值本身，大学高中化无非是把不理性的对教育的过度投资继续延长、继续上杠杆，那肯……">
+<meta property="og:description" content="我觉得可能会以非常残酷的教育泡沫的破灭而告终，一大堆过度押注孩子的家长被一把扫荡，教育回归教育的价值本身，大学高中化无非是把不理性的对教育的过度投资继续延长、继续上杠杆，那肯定不会有啥……">
 <meta property="og:image" content="https://evereternity123.github.io/assets/img/og-image.jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -100,19 +100,33 @@
     </div>
   </header>
 
-  <!-- AI 摘要与评价：**默认收起**，点了才展开 —— 别喧宾夺主，正文才是主角。
-       有没有内容由 app.js 的 initAiIntro() 决定：没内容就整块 remove()，
-       跟上面 #post-lede 的处理方式一样。
-       ⚠️ 里面是纯文本（textContent + CSS 的 pre-wrap），不走 Markdown 渲染。 -->
+  <!-- 按钮行：AI 摘要与评价（折叠）+ 查看原文。
+       「查看原文」2026-10-04 从正文首行的 [查看原文](url) 挪到这里（数据里是 source 字段）。
+       两个都没有 → 整块 remove()，跟上面 #post-lede 的处理方式一样，逻辑在 app.js 的 initAiIntro()。
+       ⚠️ AI 那块是纯文本（textContent + CSS 的 pre-wrap），不走 Markdown 渲染。 -->
   <div class="ai-intro" id="ai-intro" hidden>
-    <button class="ai-toggle" id="ai-toggle" type="button"
-            aria-expanded="false" aria-controls="ai-intro-body">
-      <span class="ai-label">AI 摘要与评价</span>
-      <svg class="ai-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
+    <div class="ai-tools">
+      <button class="ai-toggle" id="ai-toggle" type="button"
+              aria-expanded="false" aria-controls="ai-intro-body">
+        <span class="ai-label">AI 摘要与评价</span>
+        <svg class="ai-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      <!-- 原文链接：只有 source 有值时才出现。rel 里的 noopener noreferrer 别删 ——
+           目标是别人的站点（知乎 / 公众号），别把 window.opener 递过去。 -->
+      <a class="ai-source" id="post-source" href="#" target="_blank"
+         rel="noopener noreferrer" hidden>
+        <span>查看原文</span>
+        <svg class="ai-source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <path d="M15 3h6v6"/>
+          <path d="M10 14L21 3"/>
+        </svg>
+      </a>
+    </div>
     <!-- 展开是靠 .ai-intro-body 的 grid-template-rows 从 0fr 过渡到 1fr（见 style.css），
          所以这里不能再挂 hidden —— display:none 会把过渡直接掐掉。
          真正要「藏」的是中间那层 .ai-intro-clip（min-height:0 + overflow:hidden），

@@ -522,37 +522,70 @@
   }
 
   /* ---------- 文章页 ---------- */
-  /* AI 摘要与评价（折叠块，**默认收起**）。
+  /* AI 摘要与评价（折叠块，**默认收起**）+ 查看原文（外链按钮）。
      ⚠️ 用 textContent + CSS 的 white-space:pre-wrap 渲染纯文本，**不走 MD.render** ——
         它不是用户写的正文，没必要支持 Markdown，也省得摘要里一个符号把版面搞乱。
         textContent 顺带把 XSS 也挡掉了。
      展开动画在 CSS 里（.ai-intro-body 的 grid-template-rows 0fr↔1fr），
      这里只负责翻 class 和 aria —— **别再往 body 上挂 hidden**，
-     display:none 会把过渡整个掐掉，点了就是「啪」一下出来。 */
+     display:none 会把过渡整个掐掉，点了就是「啪」一下出来。
+     「查看原文」（post.source）2026-10-04 从正文首行挪到这里，和折叠按钮并排：
+     两个按钮各管各的，有哪个显示哪个，两个都没有整块不出现。 */
   function initAiIntro(post) {
     var box = $('#ai-intro');
     if (!box) return;
 
-    // 没内容、或者写作台里把开关关掉了（aiOff）→ 整块不出现
+    // 没文字、或者写作台里把开关关掉了（aiOff）→ 不显示 AI 那块
     // （跟 #post-lede 为空就 remove() 是同一个做法）
     var text = (post.ai || '').trim();
-    if (!text || post.aiOff === true) { box.remove(); return; }
+    var showAi = !!text && post.aiOff !== true;
+    var src = (post.source || '').trim();
+    // 原文被作者删了。这些文章可能连地址都没了，所以它是个**独立**标记 ——
+    // 不能写成「有 source 才可能有 sourceGone」。
+    var gone = post.sourceGone === true;
+    if (!showAi && !src && !gone) { box.remove(); return; }
 
     var btn = $('#ai-toggle');
     var inner = $('#ai-intro-inner');
-    /* p/<id>.html 是 build-posts.py 拿 post.html 当壳生成的（静态分享页）。
-       壳一旦落后于 post.html（改完忘了重新生成），这里就取不到 ——
-       实测过一个 TypeError 会把整篇文章页干掉，变成「文章加载失败」。
-       所以宁可整块不显示，也不能让这一行把页面带走。 */
-    if (!inner) { box.remove(); return; }
-    inner.textContent = text;
-    box.hidden = false;
+    var srcEl = $('#post-source');
 
-    btn.addEventListener('click', function () {
-      var open = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
-      box.classList.toggle('open', !open);
-    });
+    if (showAi && inner) {
+      inner.textContent = text;
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var open = btn.getAttribute('aria-expanded') === 'true';
+          btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+          box.classList.toggle('open', !open);
+        });
+      }
+    } else if (btn) {
+      /* 没有 AI 文字（或写作台关了开关）→ 把折叠按钮整个拿掉，只留「查看原文」。
+         inner 取不到 = p/<id>.html 是 build-posts.py 拿 post.html 当壳生成的，
+         壳一旦落后于 post.html 就缺这一层 —— 实测过一个 TypeError 会把整篇文章页
+         干掉、变成「文章加载失败」。所以宁可少一块，也不能让这一行把页面带走。 */
+      btn.remove();
+    }
+
+    if (srcEl) {
+      if (!src && !gone) {
+        srcEl.remove();          // 既没链接、也没「已删除」标记 → 按钮不出现
+      } else {
+        srcEl.hidden = false;    // HTML 里默认 hidden，确认有内容才放出来
+        if (src) srcEl.href = src;
+        else srcEl.removeAttribute('href');   // 地址都没了：按钮只负责弹提示
+        /* 原文已经删掉的那些：按钮照样显示（好让人知道这篇是有出处的），
+           但点了不跳转 —— 与其让人跳过去看一个 404，不如当场说清楚。
+           提示用的就是「已复制标题和链接」那条 toast，样式一致。 */
+        if (gone) {
+          srcEl.addEventListener('click', function (e) {
+            e.preventDefault();
+            toast('原文已删除');
+          });
+        }
+      }
+    }
+
+    box.hidden = false;
   }
 
   function initPost() {

@@ -535,13 +535,22 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   font-family: var(--font-serif);
 }
 
-/* ---------- AI 摘要与评价（默认收起，别抢正文） ---------- */
+/* ---------- AI 摘要与评价 + 查看原文（默认收起，别抢正文） ---------- */
 .ai-intro {
   /* 往上收一点 —— header 自己已经有 34px 下边距，不收会显得这块飘着 */
   margin: -14px 0 30px;
 }
 
-.ai-toggle {
+/* 按钮行：折叠按钮和「查看原文」并排。窄屏放不下就换行，别挤成两截 */
+.ai-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-toggle,
+.ai-source {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -556,12 +565,20 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   cursor: pointer;
   transition: color .18s ease, border-color .18s ease, background .18s ease;
 }
-.ai-toggle:hover { color: var(--text-2); border-color: var(--border-2); }
+.ai-toggle:hover,
+.ai-source:hover { color: var(--text-2); border-color: var(--border-2); }
 .ai-intro.open .ai-toggle {
   color: var(--accent);
   background: var(--accent-soft);
   border-color: var(--accent-line);
 }
+
+/* 「查看原文」是个 <a>，别带下划线 */
+.ai-source { text-decoration: none; }
+.ai-source-icon { width: 12px; height: 12px; }
+/* ⚠️ 上面给了 display:inline-flex，会把 [hidden] 的 display:none 盖掉
+   （作者样式优先于 UA 样式）→ 不加这条，没 source 的文章会露出一个空胶囊。 */
+.ai-source[hidden] { display: none; }
 
 .ai-chevron { width: 13px; height: 13px; transition: transform .32s cubic-bezier(.4, 0, .2, 1); }
 .ai-intro.open .ai-chevron { transform: rotate(180deg); }

@@ -193,9 +193,31 @@
       <div class="tag-picks" id="tag-picks" hidden></div>
     </div>
 
+    <!-- 原文链接：显示在文章页「AI 摘要与评价」旁边的那个「查看原文」按钮。
+         2026-10-04 之前它是写在正文第一行的 [查看原文](url)，已批量搬到这个字段。
+         留空 = 文章页不显示那个按钮（纯原创的文章就是这样）。
+         用 text + inputmode=url：手机上照样弹网址键盘，但不会被浏览器的
+         原生 url 校验拦下来（粘贴来的地址里带空格、带中文都常见）。 -->
     <label class="field">
-      <span>导语（可留空）</span>
-      <input type="text" id="f-lede" placeholder="一句话摘要，显示在标题下面" maxlength="300">
+      <span>原文链接（可留空）</span>
+      <input type="text" id="f-source" inputmode="url"
+             placeholder="https://…（留空则文章页不显示「查看原文」）">
+    </label>
+
+    <!-- 原文已删除：有些知乎回答 / 公众号文章后来被作者删了，链接打不开。
+         按钮照样显示（好让人知道这篇是有出处的），但点了不跳转、弹个提示。
+         勾选框的 id 是 #f-source-gone，写进 JSON 是 sourceGone: true。 -->
+    <label class="check">
+      <input type="checkbox" id="f-source-gone">
+      <span class="check-box" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </span>
+      <span class="check-text">
+        <b>原文已删除</b>
+        <em>原文被作者删了：按钮照样显示，点了只提示「原文已删除」。
+            地址已经找不回来的话，上面的链接留空也行。</em>
+      </span>
     </label>
 
     <!-- AI 摘要与评价：纯文本，段落之间空一行（文章页上按空行分段渲染）。

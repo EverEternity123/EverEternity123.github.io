@@ -1342,7 +1342,10 @@
     $('#f-date').value = p.date || todayISO();
     $('#f-tags').value = (p.tags || []).join(', ');
     renderTagPicks();
-    $('#f-lede').value = p.lede || '';
+    // 导语（lede）那一栏 2026-10-04 从写作台移除了；字段本身留着，
+    // 老文章的值靠下面 readForm 里 state.editing 的兜底原样带过去，不会丢。
+    $('#f-source').value = p.source || '';
+    $('#f-source-gone').checked = p.sourceGone === true;
     $('#f-ai').value = p.ai || '';
     $('#f-ai-on').checked = p.aiOff !== true;
     syncAiSwitch();
@@ -1362,13 +1365,20 @@
       title: $('#f-title').value.trim(),
       date: $('#f-date').value || todayISO(),
       tags: currentTags().slice(0, MAX_TAGS),
-      lede: $('#f-lede').value.trim(),
+      // 导语（lede）：写作台已经没有它的输入框了（2026-10-04 移除），
+      // 但**位置必须留在原处** —— 老文章的值靠 state.editing 带过来。
+      // 不能干脆不管它：out 里没有这个键的话，下面那条「带上将来可能新增的字段」
+      // 的兜底会把它补到对象**末尾**，字段顺序就乱了（verify-write-fields 抓到的）。
+      lede: state.editing ? (state.editing.lede || '') : '',
+      source: $('#f-source').value.trim(),
       ai: $('#f-ai').value.trim(),
       content: $('#f-content').value,
       author: $('#f-author').value.trim(),
       hidden: $('#f-hidden').checked
     };
     // 带上将来可能新增的字段，编辑旧文章时不会把它们弄丢
+    // （导语 lede 就是靠这条：写作台已经没有它的输入框了，但老文章的值
+    //   会被原样带过来 —— 前台 #post-lede 还在显示它）
     if (state.editing) {
       Object.keys(state.editing).forEach(function (k) {
         if (!(k in out)) out[k] = state.editing[k];
@@ -1378,6 +1388,10 @@
     if (!out.hidden) delete out.hidden;
     if (!out.author) delete out.author;
     if (!out.ai) delete out.ai;
+    if (!out.source) delete out.source;
+    // 原文已删除的允许**没有链接** —— 地址都被作者删没了，只剩这个标记
+    if ($('#f-source-gone').checked) out.sourceGone = true;
+    else delete out.sourceGone;
     // 开关关掉 = 文字留着但不显示（aiOff: true）。
     // 没有文字时两个键都别留 —— 不留空字段。
     if (out.ai && !$('#f-ai-on').checked) out.aiOff = true;
@@ -2171,8 +2185,8 @@
       toast('草稿已丢弃');
     });
 
-    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-ai', '#f-ai-on',
-     '#f-content', '#f-author', '#f-hidden']
+    ['#f-title', '#f-date', '#f-tags', '#f-source', '#f-source-gone',
+     '#f-ai', '#f-ai-on', '#f-content', '#f-author', '#f-hidden']
       .forEach(function (sel) {
         var el = $(sel);
         var onEdit = function () {
