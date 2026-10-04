@@ -97,12 +97,15 @@
 .field-row .field { flex: 1; }
 
 /* 日期 / 作者 / 标签：一行三个（2026-10-04 主人要求）。
-   ⚠️ 窄屏也保持一行三个 —— 所以 @media (max-width:520px) 里那条
-      「.field-row 一律竖排」必须给它开个例外（见文件末尾那个媒体查询）。
-      flex-basis 给 0、min-width 给 96px：正常情况下三等分，
-      真的挤到 96px 以下才换行（而不是把输入框压成一条线）。 */
-.field-row.cols-3 { flex-wrap: wrap; }
-.field-row.cols-3 .field { flex: 1 1 0; min-width: 96px; }
+   ⚠️ 窄屏（≤520px）折成**两行**：日期 + 作者一行，标签（.field-tags）独占下一行 ——
+      三列硬挤在 390px 里，input[type=date] 会被压到只显示「2026/10.」。
+      例外规则见文件末尾那个媒体查询。
+   flex-basis 给 0、min-width 给 96px：正常情况下三等分，
+   真的挤到 96px 以下才换行（而不是把输入框压成一条线）。
+   ⚠️ 间距统一交给容器的 gap：所以这里把 .field 自带的 margin-bottom 清零，
+      否则窄屏换行时「gap 12 + margin 16」会叠成 28px。 */
+.field-row.cols-3 { flex-wrap: wrap; margin-bottom: 16px; }
+.field-row.cols-3 .field { flex: 1 1 0; min-width: 96px; margin-bottom: 0; }
 
 /* 标签那栏下面的一排「已有标签」按钮：点一下就选上，再点一下取消。
    外观跟首页标签栏（.tag-btn）是同一套语言，但小一号 —— 这里是表单里的辅助操作，
@@ -487,7 +490,9 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 4px 0 18px;
+  /* 上边距 18px：上面紧挨着「已有标签」那排小胶囊（.tag-picks），
+     原来只有 4px，两个按钮群贴在一起显得是一伙的（主人 2026-10-04 提的）。 */
+  margin: 18px 0 18px;
 }
 
 .check {
@@ -836,9 +841,12 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
 @media (max-width: 520px) {
   .admin { padding: 18px 14px 130px; }
   .field-row { flex-direction: column; gap: 0; }
-  /* 日期 / 作者 / 标签 这一行**不跟着竖排**（主人 2026-10-04 要求一行三个）——
-     手机上 390px 宽也放得下（每个约 110px）。只有真的挤不下才换行。 */
+  /* 日期 / 作者 / 标签 在窄屏**折成两行**（主人 2026-10-04 拍板）：
+     日期 + 作者 一行（各占一半），标签（.field-tags）独占第二行。
+     不这么折的话，三列硬挤在 390px 里，input[type=date] 会被压到只显示「2026/10.」。 */
   .field-row.cols-3 { flex-direction: row; flex-wrap: wrap; gap: 12px; }
+  .field-row.cols-3 .field { flex: 1 1 40%; }
+  .field-row.cols-3 .field-tags { flex: 1 1 100%; }
   .admin-list li { padding: 13px 2px; }
   .admin-list .ttl { font-size: 15.5px; }
 

@@ -177,6 +177,8 @@
          ⚠️ 标签那格必须是 <div class="field"> 不能是 <label> —— 它旁边还有一排
             「点一下就选上」的已有标签按钮，套在 label 里点按钮会连带触发 label 的
             默认行为（把焦点抢回输入框）。
+         ⚠️ 那个 field-tags 类给窄屏用：手机上这一行折成两行（日期+作者 / 标签），
+            标签独占一整行 —— 三列挤在 390px 里，日期框会被压到只显示「2026/10.」。
          ⚠️ #tag-picks 那排按钮**放在这一行外面**（下面紧跟着）—— 它是横向排开的
             一堆按钮，塞进三列里会把这一行撑变形。 -->
     <div class="field-row cols-3">
@@ -189,7 +191,7 @@
         <input type="text" id="f-author" placeholder="留空 = Ever Eternity" maxlength="60"
                autocomplete="off" spellcheck="false">
       </label>
-      <div class="field">
+      <div class="field field-tags">
         <span>标签</span>
         <input type="text" id="f-tags" placeholder="生活, 随笔">
       </div>
