@@ -530,8 +530,10 @@
     var box = $('#ai-intro');
     if (!box) return;
 
+    // 没内容、或者写作台里把开关关掉了（aiOff）→ 整块不出现
+    // （跟 #post-lede 为空就 remove() 是同一个做法）
     var text = (post.ai || '').trim();
-    if (!text) { box.remove(); return; }   // 没内容 = 整块不出现（跟 #post-lede 同一个做法）
+    if (!text || post.aiOff === true) { box.remove(); return; }
 
     var btn = $('#ai-toggle');
     var body = $('#ai-intro-body');

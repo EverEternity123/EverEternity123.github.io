@@ -1328,6 +1328,15 @@
     renderTagPicks();
   }
 
+  /* 「这篇文章显示 AI 摘要与评价」开关。
+     关掉时把文本框变灰，但**内容留着** —— 不然看着像文字被删了。
+     写进 JSON 的是 aiOff: true（不是把 ai 删掉），所以随时能再勾回来。 */
+  function syncAiSwitch() {
+    var on = $('#f-ai-on');
+    var ta = $('#f-ai');
+    if (on && ta) ta.disabled = !on.checked;
+  }
+
   function fillForm(p) {
     $('#f-title').value = p.title || '';
     $('#f-date').value = p.date || todayISO();
@@ -1335,6 +1344,8 @@
     renderTagPicks();
     $('#f-lede').value = p.lede || '';
     $('#f-ai').value = p.ai || '';
+    $('#f-ai-on').checked = p.aiOff !== true;
+    syncAiSwitch();
     $('#f-content').value = p.content || '';
     // 换了篇文章，缓存的选区就作废了
     sel.start = sel.end = 0;
@@ -1367,6 +1378,10 @@
     if (!out.hidden) delete out.hidden;
     if (!out.author) delete out.author;
     if (!out.ai) delete out.ai;
+    // 开关关掉 = 文字留着但不显示（aiOff: true）。
+    // 没有文字时两个键都别留 —— 不留空字段。
+    if (out.ai && !$('#f-ai-on').checked) out.aiOff = true;
+    else delete out.aiOff;
     return out;
   }
 
@@ -1396,8 +1411,8 @@
       state.editing.content = post.content || '';
     } else {
       state.editing = {
-        id: '', title: '', date: todayISO(), tags: [], lede: '', ai: '', content: '',
-        author: '', hidden: false
+        id: '', title: '', date: todayISO(), tags: [], lede: '', ai: '',
+        aiOff: false, content: '', author: '', hidden: false
       };
     }
     state.original = JSON.parse(JSON.stringify(state.editing));
@@ -2156,8 +2171,8 @@
       toast('草稿已丢弃');
     });
 
-    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-ai', '#f-content',
-     '#f-author', '#f-hidden']
+    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-ai', '#f-ai-on',
+     '#f-content', '#f-author', '#f-hidden']
       .forEach(function (sel) {
         var el = $(sel);
         var onEdit = function () {
@@ -2167,6 +2182,10 @@
         el.addEventListener('input', onEdit);
         el.addEventListener('change', onEdit);
       });
+
+    // 关掉 AI 开关时把文本框变灰（内容留着），别让人以为文字被删了
+    var aiOnEl = $('#f-ai-on');
+    if (aiOnEl) aiOnEl.addEventListener('change', syncAiSwitch);
 
     /* ---------- 标签快捷按钮（输入框下面那排已有标签） ---------- */
     // 手打标签时下面那排的高亮要跟着变：打了「随笔」，「随笔」那颗就该亮起来
