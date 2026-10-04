@@ -100,9 +100,12 @@
     </div>
   </header>
 
-  <!-- 按钮行：AI 摘要与评价（折叠）+ 查看原文。
-       「查看原文」2026-10-04 从正文首行的 [查看原文](url) 挪到这里（数据里是 source 字段）。
-       两个都没有 → 整块 remove()，跟上面 #post-lede 的处理方式一样，逻辑在 app.js 的 initAiIntro()。
+  <!-- 按钮行：AI 摘要与评价（折叠）+ 查看原文 + 分享本文。
+       「查看原文」2026-10-04 从正文首行的 [查看原文](url) 挪到这里（数据里是 source 字段）；
+       「分享本文」2026-10-04 又在它右边加了一个（正文底部那个 .post-share 仍留着）。
+       ⚠️ 这一行里的**分享按钮每篇都要有**，所以 #ai-intro 不能再像以前那样
+           「两个按钮都没内容 → 整块 remove()」—— 改成各个按钮自己决定去留，
+           容器只负责「有文章就显示」（逻辑在 app.js 的 initAiIntro()）。
        ⚠️ AI 那块是纯文本（textContent + CSS 的 pre-wrap），不走 Markdown 渲染。 -->
   <div class="ai-intro" id="ai-intro" hidden>
     <div class="ai-tools">
@@ -119,13 +122,25 @@
       <a class="ai-source" id="post-source" href="#" target="_blank"
          rel="noopener noreferrer" hidden>
         <span>查看原文</span>
-        <svg class="ai-source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
           <path d="M15 3h6v6"/>
           <path d="M10 14L21 3"/>
         </svg>
       </a>
+      <!-- 分享本文：复制「标题 - 站点名的博客 - 链接」一行。
+           和正文底部那个 #btn-share 是同一套行为 —— initShare() 按 data-share 一起绑，
+           别在这里再写一份复制逻辑（两处迟早就长歪）。 -->
+      <button class="ai-share" id="btn-share-top" type="button" data-share
+              aria-label="复制这篇文章的标题和网址">
+        <span class="share-text">分享本文</span>
+        <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
+          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>
+        </svg>
+      </button>
     </div>
     <!-- 展开是靠 .ai-intro-body 的 grid-template-rows 从 0fr 过渡到 1fr（见 style.css），
          所以这里不能再挂 hidden —— display:none 会把过渡直接掐掉。
@@ -141,12 +156,15 @@
 
   <article class="post-body" id="post-body"></article>
 
-  <div class="post-tags" id="post-tags"></div>
+  <!-- 标签栏 2026-10-04 撤掉：主人要求文章页不显示标签。
+       数据里的 tags 字段**一个字都没动** —— 首页标签栏、筛选、全部文章页的标签云
+       都还在用，只是文章页底部不再列出来。 -->
 
-  <!-- 分享：一键把这篇文章的网址复制走。默认藏起来，JS 找到文章后再显示 -->
+  <!-- 分享：一键把这篇文章的标题和网址复制走。默认藏起来，JS 找到文章后再显示。
+       2026-10-04 起顶部按钮行里也有一个（#btn-share-top），两个共用 initShare()。 -->
   <div class="post-share" id="post-share" hidden>
-    <button class="share-btn" id="btn-share" type="button"
-            aria-label="复制这篇文章的网址">
+    <button class="share-btn" id="btn-share" type="button" data-share
+            aria-label="复制这篇文章的标题和网址">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>

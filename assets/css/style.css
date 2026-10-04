@@ -541,7 +541,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   margin: -14px 0 30px;
 }
 
-/* 按钮行：折叠按钮和「查看原文」并排。窄屏放不下就换行，别挤成两截 */
+/* 按钮行：折叠按钮 / 「查看原文」/「分享本文」并排。窄屏放不下就换行，别挤成两截 */
 .ai-tools {
   display: flex;
   flex-wrap: wrap;
@@ -550,7 +550,8 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 }
 
 .ai-toggle,
-.ai-source {
+.ai-source,
+.ai-share {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -566,8 +567,16 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   transition: color .18s ease, border-color .18s ease, background .18s ease;
 }
 .ai-toggle:hover,
-.ai-source:hover { color: var(--text-2); border-color: var(--border-2); }
+.ai-source:hover,
+.ai-share:hover { color: var(--text-2); border-color: var(--border-2); }
 .ai-intro.open .ai-toggle {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+/* 顶部的「分享本文」复制成功那一下：和展开态的折叠按钮同一套高亮，
+   跟底部那个大按钮的 .share-btn.done 呼应（两处反馈要一致，别一个闪一个不闪） */
+.ai-share.done {
   color: var(--accent);
   background: var(--accent-soft);
   border-color: var(--accent-line);
@@ -575,7 +584,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 
 /* 「查看原文」是个 <a>，别带下划线 */
 .ai-source { text-decoration: none; }
-.ai-source-icon { width: 12px; height: 12px; }
+.tool-icon { width: 12px; height: 12px; }
 /* ⚠️ 上面给了 display:inline-flex，会把 [hidden] 的 display:none 盖掉
    （作者样式优先于 UA 样式）→ 不加这条，没 source 的文章会露出一个空胶囊。 */
 .ai-source[hidden] { display: none; }
@@ -622,14 +631,16 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   overflow: hidden;               /* 收起来时把内容裁掉，别溢出来 */
 }
 
-/* 展开后那块。用无衬线 + 比正文小一号 —— 一眼看出它不是文章正文 */
+/* 展开后那块。字号比正文小一号、左侧一条竖线 —— 一眼看出它不是文章正文。
+   ⚠️ 字体 2026-10-04 从无衬线改成**和正文同一套衬线**（主人要求）：
+      区分「这不是正文」现在只靠字号 + 背景 + 左边框，别再把它调回无衬线。 */
 .ai-intro-inner {
   padding: 15px 17px;
   background: var(--bg-soft);
   border-left: 3px solid var(--accent-line);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-2);
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
   font-size: 15px;
   line-height: 1.85;
   text-align: justify;
@@ -750,17 +761,12 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   box-shadow: var(--shadow);
 }
 
-.post-tags {
-  margin-top: 44px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* ---------- 分享：复制文章链接 ---------- */
-/* 放在正文（含标签）之后、上一篇/下一篇之前 —— 读完正文就该看到它 */
+/* ---------- 分享：复制文章标题和链接 ---------- */
+/* 放在正文之后、上一篇/下一篇之前 —— 读完正文就该看到它
+   （2026-10-04 起顶部按钮行里还有一个 #btn-share-top，样式是那排小胶囊，
+     这里是大号的居中按钮，两者共用 .share-text 文案切换逻辑）
+   ⚠️ 原来的 .post-tags（文章页底部标签栏）2026-10-04 按主人要求撤掉了 ——
+      数据里的 tags 一个字没动，首页标签栏/筛选/归档都还在用。 */
 .post-share {
   margin-top: 26px;
   display: flex;

@@ -350,18 +350,19 @@
   }
 
   /* 「分享本文」复制出去的正文：**一行**，形如
-       文章标题-Ever Eternity的博客-https://…/p/<id>.html
-     （2026-09-20 用户给的格式，照抄，别自作主张加空格或换行）。
+       文章标题 - Ever Eternity的博客 - https://…/p/<id>.html
+     格式是用户 2026-09-20 给的（三段用连字符连成一行）；
+     2026-10-04 用户要求**连字符两边各加一个空格**，读起来不再挤成一坨。
 
      为什么带上标题和站点名：只给一个网址的话，粘到不抓卡片的地方
      （备忘录、短信、某些聊天工具、邮件）就只剩一串字符，看不出是哪一篇。
      标题用文章自己的 title，**不缀页面 <title> 里那个「 · Ever Eternity」**——
      站点名已经单独出现在中间那一段了，缀两遍重复。
-     标题为空（理论上不该有）就退化成「站点名-链接」，别拼出个空标题。 */
+     标题为空（理论上不该有）就退化成「站点名 - 链接」，别拼出个空标题。 */
   function shareText(post) {
     var title = String((post && post.title) || '').trim();
-    var head = title ? title + '-' : '';
-    return head + SITE_NAME + '的博客-' + shareUrl(post && post.id);
+    var head = title ? title + ' - ' : '';
+    return head + SITE_NAME + '的博客 - ' + shareUrl(post && post.id);
   }
 
   /* 剪贴板 API 要求安全上下文（https 或 localhost）。
@@ -386,32 +387,42 @@
     });
   }
 
+  /* 「分享本文」有两个：顶部按钮行里的 #btn-share-top，和正文底部的 #btn-share。
+     两个共用这一份逻辑 —— 都靠 data-share 标记，别在别处再写一份复制代码。 */
   function initShare(post) {
+    if (!post) return;
+    var btns = document.querySelectorAll('[data-share]');
+    if (!btns.length) return;
+
     var box = $('#post-share');
-    var btn = $('#btn-share');
-    if (!box || !btn || !post) return;
 
-    var label = $('.share-text', btn);
-    var resetTimer = null;
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        var label = $('.share-text', btn);
+        var resetTimer = null;
 
-    btn.addEventListener('click', function () {
-      copyText(shareText(post)).then(function () {
-        toast('已复制标题和链接');
-        // 按钮自己也变一下，光标不在提示条附近时也看得到反馈
-        if (!label) return;
-        label.textContent = '已复制';
-        btn.classList.add('done');
-        clearTimeout(resetTimer);
-        resetTimer = setTimeout(function () {
-          label.textContent = '分享本文';
-          btn.classList.remove('done');
-        }, 1800);
-      }).catch(function () {
-        toast('复制失败，长按地址栏手动复制吧', true);
-      });
-    });
+        btn.addEventListener('click', function () {
+          copyText(shareText(post)).then(function () {
+            toast('已复制标题和链接');
+            // 按钮自己也变一下，光标不在提示条附近时也看得到反馈
+            if (!label) return;
+            label.textContent = '已复制';
+            btn.classList.add('done');
+            clearTimeout(resetTimer);
+            resetTimer = setTimeout(function () {
+              label.textContent = '分享本文';
+              btn.classList.remove('done');
+            }, 1800);
+          }).catch(function () {
+            toast('复制失败，长按地址栏手动复制吧', true);
+          });
+        });
+      })(btns[i]);
+    }
 
-    box.hidden = false;
+    /* 底部那个整块默认 hidden（顶部那个不用 —— 它跟按钮行一起被 initAiIntro 放出来）。
+       ⚠️ 页面加载失败时谁都别露出来，所以这里的 hidden 是「找到文章才放开」。 */
+    if (box) box.hidden = false;
   }
 
   /* ---------- 首页 ---------- */
@@ -504,7 +515,8 @@
     /* 从地址栏恢复筛选状态（?tag=xxx&q=xxx）。
        两个都要**先设进 state、再统一 render 一次** —— 分两次 render 的话，
        第一次 render 里的 syncUrl() 会把「还没恢复的那个参数」从地址栏抹掉。
-       （首页带 ?tag= 的入口：文章页底部的标签胶囊，见 initPost 里的 post-tags） */
+       （带 ?tag= 的入口：首页标签栏、archive.html 的标签云。文章页底部那排
+         标签胶囊 2026-10-04 已撤掉，所以这条现在只服务前两个。） */
     var urlTag = param('tag');
     if (urlTag && tagbarEl &&
         tagbarEl.querySelector('.tag-btn[data-tag="' + urlTag.replace(/"/g, '\\"') + '"]')) {
@@ -529,8 +541,10 @@
      展开动画在 CSS 里（.ai-intro-body 的 grid-template-rows 0fr↔1fr），
      这里只负责翻 class 和 aria —— **别再往 body 上挂 hidden**，
      display:none 会把过渡整个掐掉，点了就是「啪」一下出来。
-     「查看原文」（post.source）2026-10-04 从正文首行挪到这里，和折叠按钮并排：
-     两个按钮各管各的，有哪个显示哪个，两个都没有整块不出现。 */
+     「查看原文」（post.source）2026-10-04 从正文首行挪到这里，和折叠按钮并排；
+     同一排还有个「分享本文」（2026-10-04 加的，两个按钮共用 initShare()）。
+     ⚠️ 正因为分享按钮**每篇都要有**，这里不能再「都没内容就整块 remove()」——
+     容器只负责「有文章就显示」，去留交给各个按钮自己决定。 */
   function initAiIntro(post) {
     var box = $('#ai-intro');
     if (!box) return;
@@ -543,7 +557,6 @@
     // 原文被作者删了。这些文章可能连地址都没了，所以它是个**独立**标记 ——
     // 不能写成「有 source 才可能有 sourceGone」。
     var gone = post.sourceGone === true;
-    if (!showAi && !src && !gone) { box.remove(); return; }
 
     var btn = $('#ai-toggle');
     var inner = $('#ai-intro-inner');
@@ -559,7 +572,7 @@
         });
       }
     } else if (btn) {
-      /* 没有 AI 文字（或写作台关了开关）→ 把折叠按钮整个拿掉，只留「查看原文」。
+      /* 没有 AI 文字（或写作台关了开关）→ 把折叠按钮整个拿掉，只留「查看原文」/「分享本文」。
          inner 取不到 = p/<id>.html 是 build-posts.py 拿 post.html 当壳生成的，
          壳一旦落后于 post.html 就缺这一层 —— 实测过一个 TypeError 会把整篇文章页
          干掉、变成「文章加载失败」。所以宁可少一块，也不能让这一行把页面带走。 */
@@ -585,6 +598,8 @@
       }
     }
 
+    /* 这一行里还有「分享本文」（每篇都有），所以容器永远要放出来 ——
+       AI 和原文链接都没有时，这一行就只剩一个分享按钮。 */
     box.hidden = false;
   }
 
@@ -643,18 +658,14 @@
       else ledeEl.remove();
     }
 
-    // AI 摘要与评价：有内容才出现，默认收起
+    // AI 摘要与评价 + 查看原文 + 分享本文（同一排按钮，见 initAiIntro）
     initAiIntro(post);
 
-    var tagsEl = $('#post-tags');
-    if (tagsEl) {
-      tagsEl.innerHTML = (post.tags || []).map(function (t) {
-        return '<a class="chip" href="index.html?tag=' + encodeURIComponent(t) + '">' +
-               MD.escape(t) + '</a>';
-      }).join('');
-    }
+    /* 文章页底部的标签栏 2026-10-04 按主人要求撤掉了（post.html 里那个 #post-tags
+       和它的样式一起删的）。数据里的 tags 没动 —— 首页标签栏、archive.html 的
+       标签云、筛选都还在用，只是文章页不再列出来。 */
 
-    // 正文底部的「分享本文」按钮。放在上一篇/下一篇之前 —— 读完正文就该看到它
+    // 「分享本文」：顶部按钮行和正文底部各一个，共用 initShare()
     initShare(post);
 
     bodyEl.innerHTML = MD.render(post.content);
