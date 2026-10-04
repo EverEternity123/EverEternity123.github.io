@@ -141,6 +141,8 @@
 #s-hero-tagline { min-height: 88px; }
 #s-now-items { min-height: 140px; }
 #s-about-body { min-height: 320px; }
+/* AI 摘要与评价：中文段落，用正文字体（不是等宽），矮一点 */
+#f-ai { min-height: 130px; font-family: inherit; }
 
 /* 预览里那个副标题，跟关于页的 .sub 长得一样 */
 #site-preview .sub { color: var(--text-3); margin: 0 0 26px; font-size: 15px; }

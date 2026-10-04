@@ -100,6 +100,22 @@
     </div>
   </header>
 
+  <!-- AI 摘要与评价：**默认收起**，点了才展开 —— 别喧宾夺主，正文才是主角。
+       有没有内容由 app.js 的 initAiIntro() 决定：没内容就整块 remove()，
+       跟上面 #post-lede 的处理方式一样。
+       ⚠️ 里面是纯文本（textContent + CSS 的 pre-wrap），不走 Markdown 渲染。 -->
+  <div class="ai-intro" id="ai-intro" hidden>
+    <button class="ai-toggle" id="ai-toggle" type="button"
+            aria-expanded="false" aria-controls="ai-intro-body">
+      <span class="ai-label">AI 摘要与评价</span>
+      <svg class="ai-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+    <div class="ai-intro-body" id="ai-intro-body" hidden></div>
+  </div>
+
   <article class="post-body" id="post-body"></article>
 
   <div class="post-tags" id="post-tags"></div>

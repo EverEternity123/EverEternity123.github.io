@@ -535,6 +535,52 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   font-family: var(--font-serif);
 }
 
+/* ---------- AI 摘要与评价（默认收起，别抢正文） ---------- */
+.ai-intro {
+  /* 往上收一点 —— header 自己已经有 34px 下边距，不收会显得这块飘着 */
+  margin: -14px 0 30px;
+}
+
+.ai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);           /* 最弱的字色：没点开之前它就该是背景 */
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.ai-toggle:hover { color: var(--text-2); border-color: var(--border-2); }
+.ai-intro.open .ai-toggle {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.ai-chevron { width: 13px; height: 13px; transition: transform .2s ease; }
+.ai-intro.open .ai-chevron { transform: rotate(180deg); }
+
+/* 展开后那块。用无衬线 + 比正文小一号 —— 一眼看出它不是文章正文 */
+.ai-intro-body {
+  margin-top: 12px;
+  padding: 15px 17px;
+  background: var(--bg-soft);
+  border-left: 3px solid var(--accent-line);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.85;
+  text-align: justify;
+  white-space: pre-wrap;          /* 段落靠空行分开，不用自己拼 <p> */
+}
+
 .back-link {
   display: inline-flex;
   align-items: center;

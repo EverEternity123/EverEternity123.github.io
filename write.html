@@ -198,6 +198,15 @@
       <input type="text" id="f-lede" placeholder="一句话摘要，显示在标题下面" maxlength="300">
     </label>
 
+    <!-- AI 摘要与评价：纯文本，段落之间空一行（文章页上按空行分段渲染）。
+         文章页默认收起，点了才展开；留空 = 那块根本不出现。
+         长度给得宽一点 —— 长文的摘要 + 评价会写到三四百字。 -->
+    <label class="field">
+      <span>AI 摘要与评价（可留空）</span>
+      <textarea id="f-ai" rows="4" maxlength="1500"
+                placeholder="摘要写一段；空一行，再用「评价：」起头写一段。短文可以只写评价。"></textarea>
+    </label>
+
     <label class="check">
       <input type="checkbox" id="f-hidden">
       <span class="check-box" aria-hidden="true">

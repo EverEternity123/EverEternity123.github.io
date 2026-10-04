@@ -522,6 +522,30 @@
   }
 
   /* ---------- 文章页 ---------- */
+  /* AI 摘要与评价（折叠块，**默认收起**）。
+     ⚠️ 用 textContent + CSS 的 white-space:pre-wrap 渲染纯文本，**不走 MD.render** ——
+        它不是用户写的正文，没必要支持 Markdown，也省得摘要里一个符号把版面搞乱。
+        textContent 顺带把 XSS 也挡掉了。 */
+  function initAiIntro(post) {
+    var box = $('#ai-intro');
+    if (!box) return;
+
+    var text = (post.ai || '').trim();
+    if (!text) { box.remove(); return; }   // 没内容 = 整块不出现（跟 #post-lede 同一个做法）
+
+    var btn = $('#ai-toggle');
+    var body = $('#ai-intro-body');
+    body.textContent = text;
+    box.hidden = false;
+
+    btn.addEventListener('click', function () {
+      var open = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      body.hidden = open;
+      box.classList.toggle('open', !open);
+    });
+  }
+
   function initPost() {
     var bodyEl = $('#post-body');
     if (!bodyEl) return;
@@ -576,6 +600,9 @@
       if (post.lede) ledeEl.textContent = post.lede;
       else ledeEl.remove();
     }
+
+    // AI 摘要与评价：有内容才出现，默认收起
+    initAiIntro(post);
 
     var tagsEl = $('#post-tags');
     if (tagsEl) {

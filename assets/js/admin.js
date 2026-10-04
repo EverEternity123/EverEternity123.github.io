@@ -1334,6 +1334,7 @@
     $('#f-tags').value = (p.tags || []).join(', ');
     renderTagPicks();
     $('#f-lede').value = p.lede || '';
+    $('#f-ai').value = p.ai || '';
     $('#f-content').value = p.content || '';
     // 换了篇文章，缓存的选区就作废了
     sel.start = sel.end = 0;
@@ -1351,6 +1352,7 @@
       date: $('#f-date').value || todayISO(),
       tags: currentTags().slice(0, MAX_TAGS),
       lede: $('#f-lede').value.trim(),
+      ai: $('#f-ai').value.trim(),
       content: $('#f-content').value,
       author: $('#f-author').value.trim(),
       hidden: $('#f-hidden').checked
@@ -1364,6 +1366,7 @@
     // 用不到的字段就不写进 JSON，保持 posts.json 干净
     if (!out.hidden) delete out.hidden;
     if (!out.author) delete out.author;
+    if (!out.ai) delete out.ai;
     return out;
   }
 
@@ -1389,10 +1392,11 @@
       state.editing = shallowCopy(post);
       state.editing.tags = (post.tags || []).slice();
       state.editing.lede = post.lede || '';
+      state.editing.ai = post.ai || '';
       state.editing.content = post.content || '';
     } else {
       state.editing = {
-        id: '', title: '', date: todayISO(), tags: [], lede: '', content: '',
+        id: '', title: '', date: todayISO(), tags: [], lede: '', ai: '', content: '',
         author: '', hidden: false
       };
     }
@@ -2152,7 +2156,8 @@
       toast('草稿已丢弃');
     });
 
-    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-content', '#f-author', '#f-hidden']
+    ['#f-title', '#f-date', '#f-tags', '#f-lede', '#f-ai', '#f-content',
+     '#f-author', '#f-hidden']
       .forEach(function (sel) {
         var el = $(sel);
         var onEdit = function () {
