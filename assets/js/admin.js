@@ -519,10 +519,11 @@
         : '<span class="pill pill-original">原创</span>';
       var hiddenPill = isHidden ? '<span class="pill pill-hidden">已隐藏</span>' : '';
       // 值得阅读程度（只有读书笔记填了才有）。主人 2026-10-05：「在文章列表那里显示打分就行」
+      // 标签用「评分」两个字 —— 跟前台卡片上那个胶囊一致（那边是 app.js 的 SCORE_LABEL）。
       // ⚠️ 用 `typeof === 'number'` 判，别用 `p.score &&`：0 分是合法分数，
       //    用真假值判的话 0 分的文章在这里会没有胶囊（前台卡片上却有）。
       var scorePill = typeof p.score === 'number'
-        ? '<span class="pill pill-score" title="值得阅读程度（满分 100）">值得读 ' +
+        ? '<span class="pill pill-score" title="值得阅读程度（满分 100）">评分 ' +
           p.score + '</span>'
         : '';
       var metaStart = '<div class="meta"><span>' + fmtDate(p.date) + '</span>' +
@@ -1413,7 +1414,7 @@
 
      ⚠️ 判「有没有填」看的是**字符串空不空**，不是数值真假：
         `Number('') === 0`、`!0 === true` —— 用真假值判的话，空框会被当成 0 分
-        存进去，前台就冒出一个「值得读 0」。0 分是合法分数，跟「没填」是两回事。
+        存进去，前台就冒出一个「评分 0」。0 分是合法分数，跟「没填」是两回事。
      ⚠️ 格式非法（`abc` / `150` / `8.5`）也返回 undefined，但**别指望它兜底** ——
         doSave() 里会先拦下来报错，不然用户填了东西却被静默丢掉。 */
   function scoreFromInput() {

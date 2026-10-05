@@ -123,11 +123,12 @@
     return typeof p.score === 'number' ? p.score : null;
   }
 
-  /* 打分小胶囊。只有书籍类文章有分数，别的文章这一段根本不出现。 */
+  /* 打分小胶囊。只有填了分数的文章才有，别的文章这一段根本不出现。 */
   function scoreBadge(p) {
     var n = scoreOf(p);
     if (n === null) return '';
-    return '<span class="badge-score" title="' + SCORE_HINT + '">值得读 ' + n + '</span>';
+    return '<span class="badge-score" title="' + SCORE_HINT + '">' +
+           SCORE_LABEL + ' ' + n + '</span>';
   }
 
   /* 阅读时长那行文字的悬停说明 */
@@ -135,6 +136,10 @@
   /* 打分胶囊的悬停说明。分数是文章自己的一个字段（`score`），
      目前只有读书笔记填了 —— 别的文章压根没有这个胶囊。 */
   var SCORE_HINT = '值得阅读程度（满分 100）';
+  /* 胶囊上的那两个字。**只在这里写一次**，卡片（scoreBadge）和归档（.arch-item .s）
+     共用 —— 分头写两份迟早一个改了一个没改。
+     主人 2026-10-05：「值得读」这三个字不好，换成「评分」。 */
+  var SCORE_LABEL = '评分';
 
   function postUrl(id) { return 'post.html?p=' + encodeURIComponent(id); }
 
@@ -313,33 +318,31 @@
       return '<span class="tag">' + MD.escape(t) + '</span>';
     }).join('');
 
-    // 只有作者不是站主时才显示，免得每张卡片重复同一个名字
-    var author = p.author && p.author !== DEFAULT_AUTHOR
-      ? '<span class="dot"></span><span class="byline">' + MD.escape(p.author) + '</span>'
-      : '';
+    /* 作者：只有不是站主时才显示，免得每张卡片重复同一个名字。
+       站主自己写的改标「原创」—— 两者互斥，卡片上不会同时出现。 */
+    var who = (p.author && p.author !== DEFAULT_AUTHOR)
+      ? '<span class="byline">' + MD.escape(p.author) + '</span>'
+      : (isOriginal(p) ? '<span class="badge-original">原创</span>' : '');
 
-    // 站主自己写的标「原创」—— 和上面互斥，所以卡片上不会同时出现作者名和这个标
-    var original = isOriginal(p)
-      ? '<span class="dot"></span><span class="badge-original">原创</span>'
-      : '';
-
-    // 「值得阅读程度」的打分（只有书籍类文章有）。主人 2026-10-05 要求
-    // **点进文章之前**就看得见 —— 所以它排在阅读时长后面，不用展开任何东西。
+    /* ⚠️ 顺序是主人 2026-10-05 定的：**日期 · 作者 · 阅读时长 · 标签 · 评分**。
+       原来把评分插在阅读时长后面、作者和标签前面，看着很乱。
+       **评分永远排最后** —— 它是这张卡片上唯一「结论性」的东西。
+       用数组拼再 join 分隔点：少一个字段就少一个点，
+       手写一堆 `'<span class="dot">'` 很容易在某个分支上多出来或漏掉。 */
+    var bits = [
+      '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>'
+    ];
+    if (who) bits.push(who);
+    bits.push('<span title="' + READING_HINT + '">' + readingShort(p) + '</span>');
+    if (tags) bits.push(tags);
     var score = scoreBadge(p);
+    if (score) bits.push(score);
 
     return '' +
       '<a class="post-card reveal" href="' + postUrl(p.id) + '">' +
         '<h3>' + MD.escape(p.title) + '</h3>' +
         '<p class="excerpt">' + MD.escape(p.lede || p.excerpt || '') + '</p>' +
-        '<div class="post-meta">' +
-          '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
-          '<span class="dot"></span>' +
-          '<span title="' + READING_HINT + '">' + readingShort(p) + '</span>' +
-          (score ? '<span class="dot"></span>' + score : '') +
-          original +
-          author +
-          (tags ? '<span class="dot"></span>' + tags : '') +
-        '</div>' +
+        '<div class="post-meta">' + bits.join('<span class="dot"></span>') + '</div>' +
       '</a>';
   }
 
@@ -934,7 +937,8 @@
                  '<time datetime="' + p.date + '">' + fmtDate(p.date) + '</time>' +
                  '<span class="t">' + MD.escape(p.title) + '</span>' +
                  (sc === null ? '' :
-                   '<span class="s" title="' + SCORE_HINT + '">值得读 ' + sc + '</span>') +
+                   '<span class="s" title="' + SCORE_HINT + '">' +
+                   SCORE_LABEL + ' ' + sc + '</span>') +
                  '<span class="a">' + MD.escape(authorOf(p)) + '</span>' +
                '</a>';
       }).join('');
