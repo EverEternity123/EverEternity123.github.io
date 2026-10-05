@@ -114,8 +114,27 @@
     return MD.readingLabel(content);
   }
 
+  /* 「值得阅读程度」的打分（0–100），只有读书笔记有；没填就返回 null。
+     ⚠️ 它是 posts.json 里的**独立字段**（写作台有一个「值得阅读程度」输入框，
+        留空就不写这个键）—— **不从 AI 摘要里现抠正则**，摘要那一段是它自己的文字。
+        列表数据（data/index.json）里也只有这个 `score`，没有 ai。
+     ⚠️ null 和 0 是两回事：0 分也是合法分数，判「有没有」必须用 `!== null`。 */
+  function scoreOf(p) {
+    return typeof p.score === 'number' ? p.score : null;
+  }
+
+  /* 打分小胶囊。只有书籍类文章有分数，别的文章这一段根本不出现。 */
+  function scoreBadge(p) {
+    var n = scoreOf(p);
+    if (n === null) return '';
+    return '<span class="badge-score" title="' + SCORE_HINT + '">值得读 ' + n + '</span>';
+  }
+
   /* 阅读时长那行文字的悬停说明 */
   var READING_HINT = '字数＝去掉代码块和空白后的正文字数；阅读时长按每分钟 350 字估算';
+  /* 打分胶囊的悬停说明。分数是文章自己的一个字段（`score`），
+     目前只有读书笔记填了 —— 别的文章压根没有这个胶囊。 */
+  var SCORE_HINT = '值得阅读程度（满分 100）';
 
   function postUrl(id) { return 'post.html?p=' + encodeURIComponent(id); }
 
@@ -304,6 +323,10 @@
       ? '<span class="dot"></span><span class="badge-original">原创</span>'
       : '';
 
+    // 「值得阅读程度」的打分（只有书籍类文章有）。主人 2026-10-05 要求
+    // **点进文章之前**就看得见 —— 所以它排在阅读时长后面，不用展开任何东西。
+    var score = scoreBadge(p);
+
     return '' +
       '<a class="post-card reveal" href="' + postUrl(p.id) + '">' +
         '<h3>' + MD.escape(p.title) + '</h3>' +
@@ -312,6 +335,7 @@
           '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
           '<span class="dot"></span>' +
           '<span title="' + READING_HINT + '">' + readingShort(p) + '</span>' +
+          (score ? '<span class="dot"></span>' + score : '') +
           original +
           author +
           (tags ? '<span class="dot"></span>' + tags : '') +
@@ -901,9 +925,16 @@
            ⚠️ 这里跟首页卡片**不一样**：卡片是「跟默认署名不一样才显示作者」，
               归档是**每篇都显示** —— 主人要的就是每行都能看到署名。
               所以直接用 authorOf()（它自己会兜底默认作者），别用 isOriginal() 过滤。 */
+        /* 「值得阅读程度」的打分（只有书籍类文章有，2026-10-05 主人要求）。
+           ⚠️ 放在标题和作者之间：`.s` 自己吃 `margin-left:auto` 把这一行剩下的
+              空间全占掉，于是「作者」还在最右边、分数紧挨着它 —— 一列扫下来
+              能直接比大小。没有分数的行不受影响（`.s + .a` 那条 CSS 只在有分数时生效）。 */
+        var sc = scoreOf(p);
         return '<a class="arch-item" href="' + postUrl(p.id) + '">' +
                  '<time datetime="' + p.date + '">' + fmtDate(p.date) + '</time>' +
                  '<span class="t">' + MD.escape(p.title) + '</span>' +
+                 (sc === null ? '' :
+                   '<span class="s" title="' + SCORE_HINT + '">值得读 ' + sc + '</span>') +
                  '<span class="a">' + MD.escape(authorOf(p)) + '</span>' +
                '</a>';
       }).join('');

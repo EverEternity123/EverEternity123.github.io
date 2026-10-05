@@ -476,6 +476,18 @@ html[data-theme="dark"] .banner-warn code { background: rgba(255, 255, 255, .09)
   letter-spacing: .06em;
 }
 
+/* 「值得阅读程度」打分（2026-10-05 主人要求「在文章列表那里显示打分就行」）。
+   只有读书笔记有；留空的文章根本不渲染这个胶囊。
+   描边 + 等宽数字：跟实心的「原创」、红的「已隐藏」都区分得开，
+   而且 65 / 84 这种两位数字宽窄一致，一列扫下来能直接比大小。 */
+.pill-score {
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 被隐藏的文章在列表里淡一点，一眼能区分 */
 .admin-list li.is-hidden .ttl { color: var(--text-2); }
 

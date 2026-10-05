@@ -452,6 +452,20 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   font-weight: 600;
   letter-spacing: .06em;
 }
+/* 「值得阅读程度」的打分（只有读书笔记有，2026-10-05 主人要求「点进文章之前就显示」）。
+   用**描边**而不是实心底 —— 旁边那个「原创」是实心的印记，这个是评分，得分得清。
+   tabular-nums 让 65 / 84 这种两位数字宽窄一致，一列扫下来能直接比大小。 */
+.post-meta .badge-score {
+  color: var(--accent);
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .empty {
   padding: 56px 20px;
@@ -498,6 +512,22 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   white-space: nowrap;
 }
 .arch-item:hover .a { color: var(--accent); }
+/* 「值得阅读程度」的打分（只有读书笔记有，2026-10-05 主人要求）。
+   它在标题和作者之间，靠 `margin-left:auto` 吃掉整行剩下的空间 ——
+   于是作者还在最右边、分数紧挨着它，一列扫下来能直接比大小。
+   ⚠️ 紧接着的 `.a` 必须把 `margin-left:auto` 让出来，否则两个 auto 会平分
+      空白、分数被推到行的正中间去。没有分数的行不受影响。 */
+.arch-item .s {
+  flex: none;
+  margin-left: auto;
+  padding-left: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.arch-item .s + .a { margin-left: 0; padding-left: 12px; }
 
 /* ---------- 文章详情 ---------- */
 .reading-progress {

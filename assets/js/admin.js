@@ -518,7 +518,15 @@
         ? '<span class="pill pill-author">' + esc(p.author) + '</span>'
         : '<span class="pill pill-original">原创</span>';
       var hiddenPill = isHidden ? '<span class="pill pill-hidden">已隐藏</span>' : '';
-      var metaStart = '<div class="meta"><span>' + fmtDate(p.date) + '</span>' + hiddenPill;
+      // 值得阅读程度（只有读书笔记填了才有）。主人 2026-10-05：「在文章列表那里显示打分就行」
+      // ⚠️ 用 `typeof === 'number'` 判，别用 `p.score &&`：0 分是合法分数，
+      //    用真假值判的话 0 分的文章在这里会没有胶囊（前台卡片上却有）。
+      var scorePill = typeof p.score === 'number'
+        ? '<span class="pill pill-score" title="值得阅读程度（满分 100）">值得读 ' +
+          p.score + '</span>'
+        : '';
+      var metaStart = '<div class="meta"><span>' + fmtDate(p.date) + '</span>' +
+                      hiddenPill + scorePill;
 
       var inner;
       if (!batch) {
@@ -1400,6 +1408,23 @@
     if (on && ta) ta.disabled = !on.checked;
   }
 
+  /* #f-score 里的「值得阅读程度」→ 整数；空着就返回 undefined（调用方据此**删掉**
+     这个键，前台就什么都不显示）。
+
+     ⚠️ 判「有没有填」看的是**字符串空不空**，不是数值真假：
+        `Number('') === 0`、`!0 === true` —— 用真假值判的话，空框会被当成 0 分
+        存进去，前台就冒出一个「值得读 0」。0 分是合法分数，跟「没填」是两回事。
+     ⚠️ 格式非法（`abc` / `150` / `8.5`）也返回 undefined，但**别指望它兜底** ——
+        doSave() 里会先拦下来报错，不然用户填了东西却被静默丢掉。 */
+  function scoreFromInput() {
+    var el = $('#f-score');
+    if (!el) return undefined;
+    var raw = String(el.value || '').trim();
+    if (!raw) return undefined;
+    if (!/^(?:100|[0-9]|[1-9][0-9])$/.test(raw)) return undefined;
+    return parseInt(raw, 10);
+  }
+
   function fillForm(p) {
     $('#f-title').value = p.title || '';
     $('#f-date').value = p.date || todayISO();
@@ -1412,6 +1437,10 @@
     $('#f-ai').value = p.ai || '';
     $('#f-ai-on').checked = p.aiOff !== true;
     syncAiSwitch();
+    // 值得阅读程度：**没有这个字段就显示空**（不是显示 0）—— 0 分是合法分数。
+    // ⚠️ 用 `typeof === 'number'` 判，别用 `p.score || ''`：那样 0 分会变成空串，
+    //    一保存就把人家的 0 分弄丢了。
+    $('#f-score').value = typeof p.score === 'number' ? String(p.score) : '';
     $('#f-content').value = p.content || '';
     // 换了篇文章，缓存的选区就作废了
     sel.start = sel.end = 0;
@@ -1435,6 +1464,11 @@
       lede: state.editing ? (state.editing.lede || '') : '',
       source: $('#f-source').value.trim(),
       ai: $('#f-ai').value.trim(),
+      // 值得阅读程度（0–100）。**必须写在字面量里**：写在下面那条
+      // 「带上将来可能新增的字段」的兜底之后的话，编辑旧文章时
+      // state.editing 里的老 score 会被补回来 —— 用户明明清空了框，
+      // 一保存分数又回来了。
+      score: scoreFromInput(),
       content: $('#f-content').value,
       author: $('#f-author').value.trim(),
       hidden: $('#f-hidden').checked
@@ -1452,6 +1486,8 @@
     if (!out.author) delete out.author;
     if (!out.ai) delete out.ai;
     if (!out.source) delete out.source;
+    // 值得阅读程度留空 = 不写这个键（前台就不显示）。0 是合法分数，不走这条。
+    if (out.score === undefined) delete out.score;
     // 原文已删除的允许**没有链接** —— 地址都被作者删没了，只剩这个标记
     if ($('#f-source-gone').checked) out.sourceGone = true;
     else delete out.sourceGone;
@@ -1535,6 +1571,13 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(post.date)) { toast('日期格式不对', true); return; }
     if (post.author && post.author.length > 60) {
       toast('作者名太长了', true); $('#f-author').focus(); return;
+    }
+    // 值得阅读程度：留空是允许的（= 不显示）；填了就必须是 0–100 的整数。
+    // ⚠️ 必须在这里拦 —— readForm() 里格式非法是当「没填」处理的，
+    //    不拦的话用户填了 `150` 一保存就被静默丢掉，还不知道为什么。
+    var scRaw = String($('#f-score').value || '').trim();
+    if (scRaw && !/^(?:100|[0-9]|[1-9][0-9])$/.test(scRaw)) {
+      toast('值得阅读程度要填 0–100 的整数', true); $('#f-score').focus(); return;
     }
 
     var list = state.posts.slice();
