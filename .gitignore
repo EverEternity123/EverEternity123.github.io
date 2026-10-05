@@ -17,6 +17,14 @@ _preview/
 # （留着的话每发一篇文章都要多出一堆 diff）。
 p/
 
+# 前台用的两份数据也是产物，由 .tools/build-index.py 从 data/posts.json 生成：
+#   data/index.json  列表页要的元数据（不含正文）
+#   data/c/<id>.json 单篇文章的正文
+# 同样发布时现生成。**注意：data/posts.json 仍然是内容，必须提交**，
+# 它才是写作台读写的唯一真源。
+data/index.json
+data/c/
+
 # GitHub 令牌（用于 API 推送 / 手机编辑）。绝对不要提交！
 .gh-token
 .env

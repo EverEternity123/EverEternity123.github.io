@@ -1,12 +1,27 @@
 /* ==========================================================================
    app.js — 页面渲染与交互
    依赖：markdown.js
-   数据：fetch('data/posts.json')，与写作台写入的是同一个文件
+   数据：**两个**文件，都是写作台写完之后由发布脚本生成的：
+     · data/index.json —— 列表页要的元数据（标题/日期/标签/摘要/字数…），**不含正文**
+     · data/c/<id>.json —— 单篇文章的正文，只有文章页才去取
+   全量的 data/posts.json 仍然在，但只在两处用：搜索时懒加载、以及上面两个
+   拿不到时的兜底。正文占 posts.json 的九成体积，列表页一个字都用不上 ——
+   这就是「首屏从 1MB 降到几十 KB」的全部原因。
+
+   ⚠️ 改这里之前先记住：**任何一路拿不到，都必须能退回 posts.json**。
+      首页开天窗比慢几秒严重得多。
    ========================================================================== */
 (function () {
   'use strict';
 
+  /* 全量（写作台写入的那个文件）—— 只当兜底和搜索索引 */
   var DATA_URL = 'data/posts.json';
+
+  /* 列表页的数据源（发布时从 DATA_URL 生成） */
+  var INDEX_URL = 'data/index.json';
+
+  /* 单篇正文的目录（同上） */
+  var CONTENT_DIR = 'data/c/';
 
   /* 自定义顺序（可选）。文件不存在就当成没有，退化成「按日期降序」 */
   var ORDER_URL = 'data/order.json';
@@ -35,6 +50,12 @@
   var STATIC_ID = typeof window.EE_POST_ID === 'string' ? window.EE_POST_ID : '';
 
   var POSTS = [];
+
+  /* 全文索引（全量 posts.json，1MB）。
+     列表页**默认不取** —— 只有用户真的要搜索时才去下（搜索要搜正文，
+     而列表数据里只有元数据）。null = 还没开始取。 */
+  var FULL_TEXT = null;
+  var FULL_TEXT_DONE = false;
 
   var MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月',
                 '七月', '八月', '九月', '十月', '十一月', '十二月'];
@@ -77,11 +98,12 @@
   /* 「几分钟」说的是**阅读时长**，不是别的。
      算法在 markdown.js：去掉代码块、按每分钟 350 字估算，至少 1 分钟。
      卡片和文章页都走这两个函数，口径不会跑偏。 */
-  function readMinutes(content) { return MD.readingTime(content); }
 
-  /* 卡片上地方小，只写「约 N 分钟」 */
-  function readingShort(content) {
-    return '约 ' + readMinutes(content) + ' 分钟';
+  /* 卡片上地方小，只写「约 N 分钟」。
+     ⚠️ 入参是**文章对象**，不是正文字符串 —— 列表数据里只有预计算好的字数、
+        没有正文（正文占整个文件的九成）。字数从哪来交给 wordsOf() 决定。 */
+  function readingShort(p) {
+    return '约 ' + MD.readingTimeFromChars(wordsOf(p)) + ' 分钟';
   }
 
   /* 文章页地方宽裕：先报字数，再报阅读时长。
@@ -116,14 +138,54 @@
     return { list: out, count: seen };
   }
 
+  /* ---------- 全文索引（搜索用，懒加载）---------- */
+
+  /* 把全量 posts.json 里的正文补进 POSTS，之后 match() 就能搜到正文了。
+     ⚠️ 只在用户真的要用搜索时才调 —— 正常浏览不该下这 1MB。
+     ⚠️ 失败要把 FULL_TEXT 清回 null，否则一次网络抖动就永久搜不了正文了。 */
+  function startFullText() {
+    if (FULL_TEXT) return FULL_TEXT;
+    FULL_TEXT = fetchJSON(DATA_URL).then(function (list) {
+      if (!Array.isArray(list)) return false;
+      var map = {};
+      list.forEach(function (p) { if (p && p.id) map[p.id] = p; });
+      POSTS.forEach(function (p) {
+        var full = map[p.id];
+        if (full && typeof full.content === 'string' && !p.content) p.content = full.content;
+      });
+      FULL_TEXT_DONE = true;
+      return true;
+    }).catch(function (err) {
+      console.warn('[app] 全文没取到，搜索只能覆盖标题、标签和摘要', err);
+      FULL_TEXT = null;
+      return false;
+    });
+    return FULL_TEXT;
+  }
+
   /* ---------- 数据加载 ---------- */
+
+  function fetchJSON(url) {
+    return fetch(url, { cache: 'no-cache' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    });
+  }
+
+  /* 列表数据：优先用生成的 index.json（只有元数据，几十 KB）；
+     拿不到就退回全量 posts.json —— 慢，但页面不会开天窗。
+     ⚠️ 这个兜底是有意留的：万一 index.json 没生成 / 没部署上去，
+        站点必须还能正常用，只是慢回原来的样子。 */
+  function fetchPosts() {
+    return fetchJSON(INDEX_URL).catch(function (err) {
+      console.warn('[app] data/index.json 没拿到，退回全量 posts.json', err);
+      return fetchJSON(DATA_URL);
+    });
+  }
 
   function loadPosts() {
     return Promise.all([
-      fetch(DATA_URL, { cache: 'no-cache' }).then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      }),
+      fetchPosts(),
       // order.json 是可选的第二个请求：读不到、404、解析失败 —— 一律当成「没排过序」
       fetch(ORDER_URL, { cache: 'no-cache' })
         .then(function (res) { return res.ok ? res.json() : null; })
@@ -141,6 +203,64 @@
         return String(b.date).localeCompare(String(a.date));
       });
     });
+  }
+
+  /* 一篇文章有多少字。
+     index.json 里是生成时算好的 `words`；退回全量 posts.json 时没有这个字段，
+     就照旧现算 —— 两边口径一样（都走 markdown.js 的 charCount）。 */
+  function wordsOf(p) {
+    if (typeof p.words === 'number') return p.words;
+    return MD.charCount(p.content);
+  }
+
+  /* ---------- 文章正文按需加载 ---------- */
+
+  /* 当前这一页要显示的那篇（列表页没有 #post-body，直接返回 null） */
+  function currentPost() {
+    if (!$('#post-body')) return null;
+    var id = STATIC_ID || param('p');
+    var shown = visiblePosts();
+    return id ? byId(id) : (shown[0] || POSTS[0]);
+  }
+
+  /* 把正文补进 post 对象。
+     ⚠️ 补完之后**下游渲染逻辑一个字都不用改** —— initPost / initAiIntro
+        拿到的还是同一个对象，只是 content / ai 从「本来就在」变成「刚取回来」。 */
+  function applyContent(post, d) {
+    if (!d) return false;
+    post.content = d.content || '';
+    if (d.ai) post.ai = d.ai;
+    if (d.aiOff === true) post.aiOff = true;
+    return true;
+  }
+
+  /* 兜底：从全量 posts.json 里捞出这一篇的正文。
+     两种情况会走到这儿：① data/c/ 还没生成（部署漏了一步）
+     ② 手上这份是老的 posts.json（正文还内联在列表数据里）。 */
+  function fetchFullPost(post) {
+    return fetchJSON(DATA_URL).then(function (list) {
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === post.id) {
+          applyContent(post, list[i]);
+          return;
+        }
+      }
+    }).catch(function () { /* 兜底也失败就算了，正文会是空的 */ });
+  }
+
+  /* 文章页专用：进渲染之前先把这一篇的正文取回来。
+     ⚠️ 只在「列表数据里没有正文」时才发请求 —— 退回全量 posts.json 的情况下
+        content 本来就在，不会白白多打一次。 */
+  function preloadPostContent() {
+    var post = currentPost();
+    if (!post || post.content) return Promise.resolve();
+    return fetchJSON(CONTENT_DIR + encodeURIComponent(post.id) + '.json')
+      .then(function (d) { return applyContent(post, d) ? null : fetchFullPost(post); })
+      .catch(function (err) {
+        console.warn('[app] 单篇正文没拿到，退回全量', err);
+        return fetchFullPost(post);
+      });
   }
 
   function setLoading() {
@@ -187,11 +307,11 @@
     return '' +
       '<a class="post-card reveal" href="' + postUrl(p.id) + '">' +
         '<h3>' + MD.escape(p.title) + '</h3>' +
-        '<p class="excerpt">' + MD.escape(p.lede || MD.excerpt(p.content, 92)) + '</p>' +
+        '<p class="excerpt">' + MD.escape(p.lede || p.excerpt || '') + '</p>' +
         '<div class="post-meta">' +
           '<time datetime="' + p.date + '">' + fmtDate(p.date, 'long') + '</time>' +
           '<span class="dot"></span>' +
-          '<span title="' + READING_HINT + '">' + readingShort(p.content) + '</span>' +
+          '<span title="' + READING_HINT + '">' + readingShort(p) + '</span>' +
           original +
           author +
           (tags ? '<span class="dot"></span>' + tags : '') +
@@ -464,9 +584,16 @@
     }
 
     if (searchEl) {
+      /* ⚠️ 列表数据里没有正文，而搜索是要搜正文的（输入框占位符也这么写着）。
+         所以**等用户真的要搜了**才去取全量 —— 正常浏览一个字都不下。
+         焦点一到就开始取（比等按键再早一点），取回来自动重搜一次。 */
+      searchEl.addEventListener('focus', startFullText);
       searchEl.addEventListener('input', function () {
         state.q = searchEl.value.trim().toLowerCase();
         render();
+        if (state.q && !FULL_TEXT_DONE) {
+          startFullText().then(function (ok) { if (ok) render(); });
+        }
       });
     }
 
@@ -502,8 +629,10 @@
       syncUrl();
       var result = shown.filter(match);
       if (!result.length) {
+        // 正在取全文时多说一句：不然用户会以为「就是没有」，其实正文还没到
+        var pending = state.q && !FULL_TEXT_DONE ? '（正文正在加载，好了会自动再搜一遍）' : '';
         listEl.innerHTML = shown.length
-          ? '<div class="empty">没有找到相关的文章。</div>'
+          ? '<div class="empty">没有找到相关的文章。' + pending + '</div>'
           : '<div class="empty">还没有文章。去 <a href="write.html" ' +
             'style="color:var(--accent)">写作台</a> 写第一篇吧。</div>';
         return;
@@ -531,6 +660,15 @@
     }
 
     render();
+
+    /* ⚠️ 从地址栏恢复出来的搜索词，也得去把正文取回来 —— 列表数据（data/index.json）
+       里**没有正文**，全文搜索要另外下 posts.json。而「搜索 → 进文章 → 返回」这条路
+       上，搜索框的 focus / input 事件**一次都不会触发**（值是浏览器填的），
+       不补这一下就永远只匹配标题和标签，条数比第一次搜少。
+       verify-back.py 抓到的就是它：搜「炒股」第一次 9 条，返回后只剩 7 条。 */
+    if (state.q && !FULL_TEXT_DONE) {
+      startFullText().then(function (ok) { if (ok) render(); });
+    }
   }
 
   /* ---------- 文章页 ---------- */
@@ -779,9 +917,7 @@
         // 按标签筛选时只报篇数：字数统计是给「整站有多少」用的，这里意义不大
         stat.textContent = '标签：' + tag + ' · 共 ' + shown.length + ' 篇';
       } else {
-        var words = shown.reduce(function (n, p) {
-          return n + String(p.content || '').replace(/\s+/g, '').length;
-        }, 0);
+        var words = shown.reduce(function (n, p) { return n + wordsOf(p); }, 0);
         stat.textContent = '共 ' + shown.length + ' 篇 · 约 ' +
                            (words / 1000).toFixed(1) + ' 千字';
       }
@@ -835,8 +971,12 @@
     loadPosts().then(function (list) {
       POSTS = list;
       initIndex();     // 内部会从地址栏恢复 ?tag= / ?q=，并统一 render 一次
-      initPost();
       initArchive();
+      /* ⚠️ 文章页要**先把正文取回来**再渲染 —— 列表数据里只有元数据。
+         列表页这一步立刻返回（没有 #post-body），所以列表不会多等。 */
+      return preloadPostContent();
+    }).then(function () {
+      initPost();
       observeReveal();
       // ⚠️ 放在最后：等筛选状态和列表都定下来，再去还滚动位置 ——
       //    早还的话会被后面那次 innerHTML 把位置冲掉。

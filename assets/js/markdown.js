@@ -196,7 +196,14 @@
 
   /* 中文阅读时长估算（约 350 字/分钟） */
   function readingTime(src) {
-    return Math.max(1, Math.round(charCount(src) / 350));
+    return readingTimeFromChars(charCount(src));
+  }
+
+  /* 字数**已经算好**时用这个（列表页拿的是 data/index.json，里面只有预计算好的
+     `words`、没有正文）。⚠️ 别在别处再写一遍 `round(n / 350)` ——
+     350 这个口径只在这一个文件里。 */
+  function readingTimeFromChars(n) {
+    return Math.max(1, Math.round(Number(n || 0) / 350));
   }
 
   /* 文章页和写作台编辑页共用的那一句：「1234 字 · 约 4 分钟读完」。
@@ -209,6 +216,7 @@
 
   global.MD = {
     render: render, excerpt: excerpt, readingTime: readingTime,
+    readingTimeFromChars: readingTimeFromChars,
     charCount: charCount, readingLabel: readingLabel, escape: esc
   };
 })(window);
