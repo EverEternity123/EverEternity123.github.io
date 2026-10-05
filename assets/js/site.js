@@ -15,12 +15,20 @@
 
   var SITE_URL = 'data/site.json';
 
+  /* ⚠️ 一定要带时间戳。GitHub Pages 对所有文件都回 `Cache-Control: max-age=600`，
+     光用 `cache:'no-cache'` 只是让浏览器去问，CDN 照样把自己那份旧副本给它 ——
+     表现就是「写作台改完站点信息，刷新还是旧的」。URL 变了它才会去取新的。
+     （app.js 里有同样的一份，见那边的 bust()；这里页面小，不引依赖。） */
+  function busted(url) {
+    return url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now();
+  }
+
   function esc(s) {
     return global.MD ? MD.escape(s) : String(s == null ? '' : s);
   }
 
   function load() {
-    return fetch(SITE_URL, { cache: 'no-cache' }).then(function (res) {
+    return fetch(busted(SITE_URL), { cache: 'no-cache' }).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });

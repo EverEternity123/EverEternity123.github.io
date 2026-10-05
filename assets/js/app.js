@@ -189,8 +189,33 @@
 
   /* ---------- 数据加载 ---------- */
 
-  function fetchJSON(url) {
-    return fetch(url, { cache: 'no-cache' }).then(function (res) {
+  /* ---------- 绕开 GitHub Pages 的 10 分钟缓存 ----------
+
+     Pages 对**所有**文件都回 `Cache-Control: max-age=600`。所以就算用
+     `cache:'no-cache'` 让浏览器去问，CDN 也会把自己那份旧副本直接给它 ——
+     表现就是「写作台明明改完了，刷新还是老样子」。
+     唯一的办法是**让 URL 变**：带上一个参数，CDN 就当成另一个文件，回去取新的。
+
+     · 小文件（列表数据 / 单篇正文 / 顺序 / 站点信息）—— **每次加载都带新戳**。
+       它们加起来几十 KB，不值得为省这点流量去冒「改了看不见」的风险。
+     · 大文件（全量 posts.json，1MB，只有搜索才下）—— **只在点过「同步最新」
+       之后才带戳**。否则每次点一下搜索框都要重下 1MB。 */
+  var SYNC_KEY = 'ee-sync';
+
+  function syncStamp() {
+    try { return sessionStorage.getItem(SYNC_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  /* always=true → 每次调用都生成一个新戳（拿最新）；
+     always=false → 只有用户点过「同步最新」才带戳，否则原样返回（吃缓存）。 */
+  function bust(url, always) {
+    var v = always ? String(Date.now()) : syncStamp();
+    if (!v) return url;
+    return url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + v;
+  }
+
+  function fetchJSON(url, fresh) {
+    return fetch(bust(url, fresh), { cache: 'no-cache' }).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });
@@ -201,9 +226,9 @@
      ⚠️ 这个兜底是有意留的：万一 index.json 没生成 / 没部署上去，
         站点必须还能正常用，只是慢回原来的样子。 */
   function fetchPosts() {
-    return fetchJSON(INDEX_URL).catch(function (err) {
+    return fetchJSON(INDEX_URL, true).catch(function (err) {
       console.warn('[app] data/index.json 没拿到，退回全量 posts.json', err);
-      return fetchJSON(DATA_URL);
+      return fetchJSON(DATA_URL, true);
     });
   }
 
@@ -211,7 +236,7 @@
     return Promise.all([
       fetchPosts(),
       // order.json 是可选的第二个请求：读不到、404、解析失败 —— 一律当成「没排过序」
-      fetch(ORDER_URL, { cache: 'no-cache' })
+      fetch(bust(ORDER_URL, true), { cache: 'no-cache' })
         .then(function (res) { return res.ok ? res.json() : null; })
         .catch(function () { return null; })
     ]).then(function (both) {
@@ -262,7 +287,7 @@
      两种情况会走到这儿：① data/c/ 还没生成（部署漏了一步）
      ② 手上这份是老的 posts.json（正文还内联在列表数据里）。 */
   function fetchFullPost(post) {
-    return fetchJSON(DATA_URL).then(function (list) {
+    return fetchJSON(DATA_URL, true).then(function (list) {
       if (!Array.isArray(list)) return;
       for (var i = 0; i < list.length; i++) {
         if (list[i] && list[i].id === post.id) {
@@ -279,7 +304,7 @@
   function preloadPostContent() {
     var post = currentPost();
     if (!post || post.content) return Promise.resolve();
-    return fetchJSON(CONTENT_DIR + encodeURIComponent(post.id) + '.json')
+    return fetchJSON(CONTENT_DIR + encodeURIComponent(post.id) + '.json', true)
       .then(function (d) { return applyContent(post, d) ? null : fetchFullPost(post); })
       .catch(function (err) {
         console.warn('[app] 单篇正文没拿到，退回全量', err);
@@ -366,6 +391,29 @@
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
 
     Array.prototype.forEach.call(items, function (el) { io.observe(el); });
+  }
+
+  /* ---------- 「同步最新」按钮 ----------
+
+     GitHub Pages 对页面和资源都回 `Cache-Control: max-age=600`，所以
+     「写作台刚改完 → 刷新」经常还是旧页面，重进也一样（CDN 那份还没过期）。
+     点这个按钮会带一个**独一无二的**参数重新进当前页：
+       · CDN 把它当新地址 → 回去取一份新 HTML；
+       · 新 HTML 里资源地址带的是**内容 hash**（发布时打的，见
+         .tools/stamp-assets.py），内容变过就自动是新地址，缓存被绕开。
+     数据那几份 JSON 每次加载本来就带时间戳（见上面的 bust()），不归它管。 */
+  function initSync() {
+    var btn = $('.sync-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      try { sessionStorage.setItem(SYNC_KEY, String(Date.now())); } catch (e) { /* ignore */ }
+      btn.classList.add('is-busy');
+      btn.disabled = true;
+      var url = location.pathname + location.search;
+      // 清掉上一次留下的 ?v=… 再加新的，免得参数越滚越长
+      url = url.replace(/([?&])v=[^&#]*/g, '$1').replace(/[?&](?=$|#)/, '');
+      location.replace(url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now());
+    });
   }
 
   /* ---------- 回到顶部 ---------- */
@@ -973,6 +1021,7 @@
     highlightNav();
     initToTop();
     initBack();
+    initSync();
     setLoading();
 
     /* 列表页关掉浏览器自带的滚动恢复，改由我们自己记 / 自己还。

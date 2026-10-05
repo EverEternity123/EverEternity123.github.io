@@ -202,6 +202,32 @@ a { color: inherit; text-decoration: none; }
 html[data-theme="dark"] .theme-toggle .icon-sun  { display: block; }
 html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
+/* ---------- 「同步最新」按钮 ----------
+   GitHub Pages 对页面和资源都回 Cache-Control: max-age=600（10 分钟），
+   所以「写作台刚改完 → 刷新」经常还是旧的，重进也一样 —— CDN 那份还没过期。
+   点它会带一个独一无二的时间戳重新进当前页，逼 CDN 去取一份新的。
+   样式跟旁边的主题按钮同一套，只是悬停不转、点下去自己转一圈当反馈。
+   ⚠️ 顺序必须是「同步」在「主题」左边（HTML 里也是这么写的）。 */
+.sync-btn {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 0;
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.sync-btn:hover { color: var(--accent); border-color: var(--accent-line); }
+.sync-btn svg { width: 17px; height: 17px; }
+/* 点下去就转，转到页面被换掉为止 —— 否则点了没反应，看着像坏了 */
+.sync-btn.is-busy svg { animation: ee-sync-spin .8s linear infinite; }
+@keyframes ee-sync-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sync-btn.is-busy svg { animation: none; }
+}
+
 /* ---------- 站点信息加载前的遮罩 ----------
    首页介绍、关于页正文、页脚落款都是 site.js 读完 data/site.json 才填的，
    HTML 里那份只是兜底。改了站点信息之后兜底就跟不上了 —— 页面会先闪一下
