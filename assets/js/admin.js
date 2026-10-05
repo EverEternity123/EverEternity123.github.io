@@ -151,11 +151,75 @@
     });
   }
 
+  /* 文件文本 → 对象。解析失败时给一句人话，
+     别把 `Unexpected end of JSON input` 这种原生报错直接甩给用户。 */
+  function parseFileJson(text, name) {
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error(name + ' 的内容不是有效的 JSON（读到 ' + text.length +
+                      ' 个字符）。先确认文件没被改坏，再点「刷新」重试。');
+    }
+  }
+
   /* 仓库里任意一个文件的 Contents API 地址 */
   function contentsPathOf(p) {
     return '/repos/' + encodeURIComponent(CFG.owner) + '/' +
            encodeURIComponent(CFG.repo) + '/contents/' +
            String(p || '').split('/').map(encodeURIComponent).join('/');
+  }
+
+  /* 读文件的**原文**（raw 媒体类型）。
+     ⚠️ 为什么需要它：Contents API 只对 **≤1MB** 的文件内联返回内容 ——
+        更大的文件会返回 `"content": ""` + `"encoding": "none"`。
+        这时候必须换 `Accept: application/vnd.github.raw` 再要一次，
+        它直接给文件原文（支持到 100MB，也不用 base64 解码）。
+     2026-10-05 踩到：posts.json 涨到 1.07MB 后写作台**登不进去**，
+        报的是 `Unexpected end of JSON input`（`JSON.parse("")` 抛的），
+        看着像令牌坏了，其实是文件越过了 1MB 这道坎。
+     ⚠️ 这不是「偶发故障」，别靠重试解决 —— 文件一旦过线，每次都会这样。
+     ⚠️ raw 不返回 sha，所以 sha 仍然要从 Contents API 拿（见 ghTextFile）。 */
+  function ghRaw(path, ref) {
+    var headers = { 'Accept': 'application/vnd.github.raw' };
+    if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+    var url = API + path;
+    if (ref) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'ref=' + encodeURIComponent(ref);
+
+    return fetch(url, { headers: headers, cache: 'no-store' }).then(function (res) {
+      return res.text().then(function (text) {
+        if (res.ok) return text;
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        var err = new Error(ghError(res.status, data));
+        err.status = res.status;
+        throw err;
+      });
+    });
+  }
+
+  /* 读仓库里的一个文本文件 → { sha, text }。
+     ≤1MB 走 Contents API 一次搞定；超过 1MB 时它不给内容，补一次 raw 请求。
+     ⚠️ 别把这两条路合成「一律走 raw」—— raw 不返回 sha，
+        而保存时要用 sha 做乐观锁（防止覆盖别处的改动）。
+     ⚠️⚠️ 判「有没有内联内容」**必须看 `content` 的长度，不能看类型**：
+        >1MB 时 GitHub 返回的是 `"content": ""`（**空字符串，不是 null**），
+        而 `typeof "" === 'string'` 恒为 true —— 2026-10-05 就栽在这上面：
+        兜底分支写了却永远进不去，`JSON.parse('')` 照样抛
+        `Unexpected end of JSON input`，看着像令牌失效。 */
+  function ghTextFile(path, ref) {
+    var branch = ref || CFG.branch || 'main';
+    return gh(contentsPathOf(path) + '?ref=' + encodeURIComponent(branch))
+      .then(function (data) {
+        if (!data) throw new Error('文件读取失败：仓库没有返回内容');
+        var inline = typeof data.content === 'string' && data.content.length > 0;
+        if (inline && data.encoding !== 'none') {
+          return { sha: data.sha, text: b64decode(data.content) };
+        }
+        // 没内联内容（>1MB）：换 raw 媒体类型再要一次，它给文件原文
+        return ghRaw(contentsPathOf(path), branch).then(function (text) {
+          return { sha: data.sha, text: text };
+        });
+      });
   }
 
   function contentsPath() {
@@ -178,12 +242,12 @@
      按日期插进对应的位置（不是一律顶到最前面）。标签同理，没记过的排在后面。
      ====================================================================== */
 
-  /* order.json 的内容 → { ids: [...], tags: [...] }。
+  /* order.json 的**原文** → { ids: [...], tags: [...] }。
      文件坏掉就当没排过序，不阻断列表；老文件没有 tags 字段也一样。 */
-  function parseOrder(content) {
+  function parseOrder(text) {
     var empty = { ids: [], tags: [] };
     try {
-      var obj = JSON.parse(b64decode(content));
+      var obj = JSON.parse(text);
       if (!window.EE_ORDER) return empty;
       return { ids: window.EE_ORDER.idsOf(obj), tags: window.EE_ORDER.tagsOf(obj) };
     } catch (e) {
@@ -225,25 +289,24 @@
   }
 
   function loadPosts() {
-    var ref = encodeURIComponent(CFG.branch || 'main');
+    var ref = CFG.branch || 'main';
     return Promise.all([
-      gh(contentsPath() + '?ref=' + ref),
+      /* ⚠️ 走 ghTextFile 而不是 gh：posts.json 一旦超过 1MB，Contents API 就不给
+         内联内容了，必须由它自动补一次 raw 请求（2026-10-05 踩到）。 */
+      ghTextFile(CFG.path, ref),
       // order.json 是后加的文件，老仓库里可能还没有 —— 404 当成「没排过序」
-      gh(contentsPathOf(orderPath()) + '?ref=' + ref).catch(function (e) {
+      ghTextFile(orderPath(), ref).catch(function (e) {
         if (e.status === 404) return null;
         throw e;
       })
     ]).then(function (both) {
       var data = both[0], odata = both[1];
-      if (!data || typeof data.content !== 'string') {
-        throw new Error('文件内容读取失败');
-      }
       state.sha = data.sha;
-      var list = JSON.parse(b64decode(data.content));
+      var list = parseFileJson(data.text, 'posts.json');
       if (!Array.isArray(list)) throw new Error('posts.json 格式不对：顶层应该是数组');
 
       state.orderSha = odata ? odata.sha : null;
-      state.order = odata ? parseOrder(odata.content) : { ids: [], tags: [] };
+      state.order = odata ? parseOrder(odata.text) : { ids: [], tags: [] };
       state.tagOrder = state.order.tags.slice();
       state.posts = applyOrder(list);
     }).catch(function (err) {
@@ -1874,13 +1937,11 @@
   };
 
   function loadSite() {
-    var ref = encodeURIComponent(CFG.branch || 'main');
-    return gh(contentsPathOf(sitePath()) + '?ref=' + ref).then(function (data) {
-      if (!data || typeof data.content !== 'string') {
-        throw new Error('站点信息读取失败');
-      }
+    // ⚠️ 同样走 ghTextFile：site.json 现在很小，但万一哪天写长了超过 1MB，
+    //    Contents API 会同样不给内容（跟 posts.json 一个坑）。
+    return ghTextFile(sitePath(), CFG.branch || 'main').then(function (data) {
       state.siteSha = data.sha;
-      var obj = JSON.parse(b64decode(data.content));
+      var obj = parseFileJson(data.text, 'site.json');
       if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
         throw new Error('site.json 格式不对：顶层应该是一个对象');
       }
