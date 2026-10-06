@@ -19,7 +19,7 @@
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css?v=ababe543">
-<link rel="stylesheet" href="assets/css/admin.css?v=c012d588">
+<link rel="stylesheet" href="assets/css/admin.css?v=2f09c44d">
 <script>
 (function () {
   try {
@@ -172,11 +172,16 @@
       <button class="btn btn-ghost" id="btn-draft-discard">丢弃</button>
     </div>
 
-    <!-- 2026-10-06 主人要求：一行放两个文本框，**且两列等宽**。
-         三行分别是 标题|作者、日期|原文链接、标签|值得阅读程度。
-         ⚠️ 一开始做的是「按内容给宽度」（标题那行左宽、日期那行右宽），
-            主人看过截图说太丑 → 改成三行一律五五开。**别再加回比例修饰类。** -->
-    <div class="field-row cols-2">
+    <!-- 2026-10-06 主人最终定的布局：**两行、每行三个文本框、三列等宽**。
+         第 1 行 标题|作者|日期，第 2 行 原文链接|标签|值得阅读程度
+         （按字段顺序三三切开，主人选的）。
+         ⚠️ 演变过程别再走回头路：
+            ① 最早「一行三个」（.cols-3）；
+            ② 主人要「一行两个」→ 三行两列；
+            ③ 试过「按内容给宽度」（.wide-left / .wide-right）→ 主人说太丑；
+            ④ 改成三行两列等宽 → 主人又要「两行每行三个」→ 就是现在这样。
+            结论：主人要的是**整齐的等宽网格**，别再加比例修饰类、别再擅自改列数。 -->
+    <div class="field-row cols-3">
       <label class="field">
         <span>标题</span>
         <input type="text" id="f-title" placeholder="今天想写点什么" maxlength="120">
@@ -186,29 +191,21 @@
         <input type="text" id="f-author" placeholder="留空 = Ever Eternity" maxlength="60"
                autocomplete="off" spellcheck="false">
       </label>
+      <!-- ⚠️ .field-date 给日期框一个 min-width —— 三列等宽时它只占 1/3，
+          真被压到 150px 以下时至少还能显示完整「2026/10/06」（2026-10-04 踩过）。 -->
+      <label class="field field-date">
+        <span>日期</span>
+        <input type="date" id="f-date">
+      </label>
     </div>
 
-    <!-- 日期 / 原文链接：跟另外两行一样五五开（主人 2026-10-06 定的，三行一律等宽）。
+    <!-- 第 2 行：原文链接|标签|值得阅读程度。
          原文链接 = 文章页「AI 摘要与评价」旁边那个「查看原文」按钮。
          2026-10-04 之前它是写在正文第一行的 [查看原文](url)，已批量搬到这个字段。
          留空 = 文章页不显示那个按钮（纯原创的文章就是这样）。
          用 text + inputmode=url：手机上照样弹网址键盘，但不会被浏览器的
          原生 url 校验拦下来（粘贴来的地址里带空格、带中文都常见）。
-         ⚠️ .field-date 给日期框一个 min-width —— 等宽后它占一半宽度，正常够用，
-            但真被压到 150px 以下时至少还能显示完整「2026/10/06」。 -->
-    <div class="field-row cols-2">
-      <label class="field field-date">
-        <span>日期</span>
-        <input type="date" id="f-date">
-      </label>
-      <label class="field">
-        <span>原文链接</span>
-        <input type="text" id="f-source" inputmode="url"
-               placeholder="可留空；留空则文章页不显示「查看原文」">
-      </label>
-    </div>
 
-    <!-- 标签 / 值得阅读程度：两个都短，等分。
          · 值得阅读程度 = 0–100 的整数（主人 2026-10-05 要求）。填了 → 首页卡片和
            「全部文章」列表上多一个「评分 NN」的小胶囊，**不用点进文章**就看得见；
            留空 → 这个键根本不写进 JSON，前台什么都不显示。
@@ -220,9 +217,14 @@
          ⚠️ 标签那格必须是 <div class="field"> 不能是 <label> —— 它下面紧跟着一排
             「点一下就选上」的已有标签按钮，套在 label 里点按钮会连带触发 label 的
             默认行为（把焦点抢回输入框）。
-         ⚠️ #tag-picks 那排按钮**放在这一行外面**（下面紧跟着）—— 它是横向排开的
-            一堆按钮，塞进两列里会把这一行撑变形。 -->
-    <div class="field-row cols-2">
+         ⚠️ #tag-picks 那排按钮**放在这两行外面**（下面紧跟着）—— 它是横向排开的
+            一堆按钮，塞进三列里会把这一行撑变形。 -->
+    <div class="field-row cols-3">
+      <label class="field">
+        <span>原文链接</span>
+        <input type="text" id="f-source" inputmode="url"
+               placeholder="可留空；留空则文章页不显示「查看原文」">
+      </label>
       <div class="field field-tags">
         <span>标签</span>
         <input type="text" id="f-tags" placeholder="生活, 随笔">
