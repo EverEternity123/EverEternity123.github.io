@@ -359,7 +359,9 @@
         MD.excerpt() 自己的默认值是 88，**必须显式传 92**，不然卡片摘要会跟以前不一样。
      ⚠️ 三个文件是**三次提交**（Contents API 一次只能写一个文件）。顺序：
         posts.json（唯一真源，先写，保证主人的改动一定落盘）→ 两个产物。
-        产物写失败只会让页面慢一拍，不会丢内容；界面会提示「请再点一次保存」。 */
+        产物写失败只会让页面慢一拍，不会丢内容；界面会提示「请再点一次保存」。
+     ⚠️⚠️ **这三个写必须串行，一次只能有一个在飞**。原因见 syncArtifacts
+        上面的注释：GitHub 对同分支并发写会 409。 */
   var EXCERPT_LIMIT = 92;
 
   function jsonText(obj) {
@@ -407,39 +409,81 @@
       });
   }
 
+  /* 写一个已有文件，失败（409）时**重新取一次 sha 再试**。
+     ⚠️ 为什么值得重试：409 的真实含义是「分支 HEAD 在我读 sha 之后动过了」，
+        不是「文件内容冲突」。重新取一次 sha 通常就过了。
+        别把 409 直接甩给用户说「文件在别处被改过」—— 那是 ghError 的通用文案，
+        在产物同步这个场景里是**误导**。 */
+  function putWithRetry(path, text, message, tries) {
+    tries = (tries == null) ? 3 : tries;
+    function once(n) {
+      return shaOfFile(path)
+        .then(function (sha) { return putTextFile(path, text, message, sha); })
+        .catch(function (err) {
+          if (n > 1 && err.status === 409) {
+            // 稍等一下再重来，避免又和「刚刚那次写」撞上
+            return new Promise(function (res) { setTimeout(res, 400); })
+              .then(function () { return once(n - 1); });
+          }
+          throw err;
+        });
+    }
+    return once(tries);
+  }
+
   /* 把两个产物按**当前 state.posts** 整份重建。
-     列表页读 index.json、文章页读 c/<id>.json，两个都要写。 */
+     列表页读 index.json、文章页读 c/<id>.json，两个都要写。
+     ⚠️⚠️ **必须串行，绝对不能 Promise.all 并发**。
+        2026-10-06 实测（`_preview/_probe-concurrent-put.py`，在临时分支上做、
+        不影响 main）：
+          · 并发 PUT 两个不同文件 → 1 个 201、1 个 **409**
+            （`is at <sha> but expected <sha>`，是 **ref/分支层面**的冲突，
+             不是文件 blob 的乐观锁）；
+          · 串行 PUT 两个文件 → 2/2 全 201。
+        GitHub 的 Contents API 服务端是「读分支 HEAD → 建 commit → 更新 ref」，
+        同一分支上并发的第二次写会拿着过期的 base，直接被拒。
+        这个并发就是主人「改完文章、文章页还是旧的」的**直接原因**：
+        c/<id>.json 和 index.json 每轮**只成功一个**，而且是随机的。
+        （提交历史可见：10:13 那轮只落了 index，10:14 那轮只落了 c/，10:15 两个都没落。） */
   function syncArtifacts(post, opts) {
     opts = opts || {};
     var ordered = state.posts.slice().sort(byDateDesc);
     var id = post.id;
-    return Promise.all([
-      shaOfFile('data/c/' + id + '.json'),
-      shaOfFile('data/index.json')
-    ]).then(function (shas) {
-      var jobs = [];
+    var errs = [];
+
+    // 每个产物独立：前一个失败也要继续写后一个（两个文件互不依赖）。
+    function step(fn) {
+      return fn().catch(function (err) { errs.push(err); });
+    }
+
+    return step(function () {
       // 被删掉的那篇：它的单篇文件留着也无害（index.json 不再引用它，
       // 永远不会被请求；build-index.py 下次发布会清掉），这里不单独删。
-      if (!opts.deleted) {
-        jobs.push(putTextFile('data/c/' + id + '.json', jsonText(postBodyOf(post)),
-                              '更新正文缓存：' + post.title, shas[0]));
-      }
-      jobs.push(putTextFile('data/index.json',
-                            jsonText(ordered.map(indexRowOf)),
-                            (opts.deleted ? '重建列表缓存：' : '更新列表缓存：') + post.title,
-                            shas[1]));
-      return Promise.all(jobs);
+      if (opts.deleted) return Promise.resolve();
+      return putWithRetry('data/c/' + id + '.json', jsonText(postBodyOf(post)),
+                          '更新正文缓存：' + post.title);
+    }).then(function () {
+      // 顺序固定：先文章页正文，再列表页。主人最在意的是「点进去看到新内容」。
+      return step(function () {
+        return putWithRetry('data/index.json', jsonText(ordered.map(indexRowOf)),
+                            (opts.deleted ? '重建列表缓存：' : '更新列表缓存：') + post.title);
+      });
+    }).then(function () {
+      if (errs.length) throw errs[0];
     });
   }
 
   /* 产物是「后置」的：失败了不影响这次保存本身，只提示主人再点一次。
      ⚠️ 不要把它的失败冒泡给调用方 —— 那会让 doSave 走回滚分支，
-        把明明已经提交成功的文章从界面上抹掉。 */
+        把明明已经提交成功的文章从界面上抹掉。
+     返回 true/false 表示产物到底写没写成功（调用方要据此决定弹哪句 toast）。 */
   function syncArtifactsQuietly(post, opts) {
-    return syncArtifacts(post, opts).catch(function (err) {
-      toast('正文已保存，但页面缓存没跟上（' + err.message + '）—— ' +
-            '请再点一次「保存并发布」', true);
-    });
+    return syncArtifacts(post, opts).then(function () { return true; },
+      function (err) {
+        toast('正文已保存，但页面数据没跟上（' + err.message + '）—— ' +
+              '请再点一次「保存并发布」', true);
+        return false;
+      });
   }
 
   /* ======================================================================
@@ -1135,9 +1179,28 @@
     });
   }
 
+  /* 只重建**列表产物** data/index.json，不动单篇文件。
+     批量编辑改的是标签 / 隐藏状态 / 标题这些 —— 它们只在 index.json 里
+     （data/c/<id>.json 只有 content / ai），所以只重建这一个。
+     ⚠️ 和 syncArtifacts 一样：**串行**，别和别的写并发（见那边的注释）。
+     ⚠️ 只改「顺序」时**不要**调它 —— 顺序不在 index.json 里，
+        写了内容也不变，只会白多一个空提交。 */
+  function syncIndexQuietly(message) {
+    var rows = state.posts.slice().sort(byDateDesc).map(indexRowOf);
+    return putWithRetry('data/index.json', jsonText(rows), message)
+      .then(function () { return true; },
+        function (err) {
+          toast('改动已保存，但列表页数据没跟上（' + err.message + '）—— ' +
+                '请再点一次「保存全部改动」', true);
+          return false;
+        });
+  }
+
   /* 保存批量编辑：标签 / 公开状态进 posts.json，文章顺序 + 标签顺序进 order.json。
      Contents API 一次只能写一个文件，所以两处都有改动时就是两次提交；
-     任一步失败都重新拉一遍，别让界面跟远端不一致。 */
+     任一步失败都重新拉一遍，别让界面跟远端不一致。
+     ⚠️ 两次写是**串行**的（下面 reduce 链）—— 并发会 409（见 syncArtifacts 的注释）。
+     ⚠️ 标签 / 隐藏状态改完还要重建 data/index.json，不然首页卡片还是旧标签。 */
   function saveBatch() {
     var c = batchChanges();
     if (!c.order && !c.tagOrder && !c.tags.length && !c.hidden.length) {
@@ -1175,7 +1238,14 @@
         state.batchBaselineTags = [];
         state.batchSnapshot = null;
         renderList();
-        toast('已保存 ' + parts.join(' + ') + '，网站约 1 分钟后更新');
+        toast('已保存 ' + parts.join(' + ') + '，正在更新页面数据…');
+        // ⚠️ 标签 / 隐藏状态会进 index.json（首页卡片读它）——
+        //    不重建的话「改了标签首页没变」又是一轮排查。
+        //    「顺序」不进 index.json，所以那种情况跳过，免得白写一个空提交。
+        if (!c.tags.length && !c.hidden.length) return;
+        return syncIndexQuietly(message).then(function (ok) {
+          if (ok) toast('已保存 ' + parts.join(' + ') + '，页面数据已更新');
+        });
       })
       .catch(function (e) {
         // 只成功了一半（比如顺序写进去了、标签没有）：拉回远端的真实状态，
@@ -1719,12 +1789,19 @@
         renderList();
         show('list');
         var sha = data && data.commit && data.commit.sha ? data.commit.sha.slice(0, 7) : '';
+        // ⚠️ 这两句 toast 是**故意分两段**的：
+        //    第一段在 posts.json 提交成功时弹，第二段在**产物也写完之后**才弹。
+        //    合起来的话主人会以为「已提交」= 全好了，然后马上关掉页面 ——
+        //    而产物还在飞，手机浏览器一切后台/关页就**掐断 fetch**，
+        //    文章页于是又停在旧内容上（2026-10-06 那两次保存就有这个嫌疑）。
         toast('已提交' + (sha ? '（' + sha + '）' : '') +
-              (post.hidden ? '，这篇是隐藏的' : '') + '，网站约 1 分钟后更新');
+              (post.hidden ? '，这篇是隐藏的' : '') + '，正在更新页面数据…');
         // ⚠️ 顺手重建两个产物 —— 不重建的话文章页 / 列表页读到的还是旧数据，
         //    而且「刷新」永远刷不出来（数据源本身是旧的，不是缓存问题）。
         //    失败也不影响这次保存，所以走 quietly 版本（见它的注释）。
-        return syncArtifactsQuietly(post);
+        return syncArtifactsQuietly(post).then(function (ok) {
+          if (ok) toast('页面数据已更新' + (sha ? '（' + sha + '）' : '') + '，稍后即可看到');
+        });
       })
       .catch(function (err) {
         // 提交失败：回滚内存状态，避免界面与远端不一致
@@ -1748,9 +1825,10 @@
       .then(function () {
         clearDraft(id);
         renderList();
-        toast('已删除，网站约 1 分钟后更新');
+        toast('已删除，正在更新页面数据…');
         // 列表页读的是产物 —— 不重建的话那张卡片还会留在首页上
-        return syncArtifactsQuietly(removed || { id: id, title: title }, { deleted: true });
+        return syncArtifactsQuietly(removed || { id: id, title: title }, { deleted: true })
+          .then(function (ok) { if (ok) toast('页面数据已更新，稍后即可看到'); });
       })
       .catch(function (err) {
         if (removed) state.posts.push(removed);
@@ -2261,10 +2339,17 @@
      还是老样子」这件事，在这里同样会发生 —— 而写作台恰恰是主人手机上用得最多的页面。
 
      前台那五个页面用的是 `app.js` 的 `initSync()`；写作台不加载 `app.js`，
-     所以这里再绑一次。两处逻辑一样，都只是「带一个独一无二的参数重新进当前页」：
-       · CDN 把它当新地址 → 回去取一份新 HTML；
-       · 新 HTML 里资源地址带的是**内容 hash**（发布时由 .tools/stamp-assets.py 打），
-         内容变过就自动是新地址，缓存一起被绕开。
+     所以这里再绑一次。**两处逻辑必须保持一致**（改一处记得改另一处）。
+
+     ⚠️⚠️ 原来这里也是「加一个 ?v=<时间戳> 重新进当前页」—— **那是错的**。
+        2026-10-06 实测（`_preview/_probe-cdn-cache.py`）：GitHub Pages 的 CDN
+        **缓存键不含 query**，两个全新的参数拿到的是同一个缓存对象；
+        连请求头 `Cache-Control: no-cache`（硬刷新）也照样命中 HIT。
+        → 改成**让路径本身变**：路径中间塞进若干个重复斜杠，
+          CDN 把它当另一个文件，第一次请求必定 MISS 回源。
+        完整原理、实测数据和「为什么只能用重复斜杠不能用 `/./`」
+        都写在 `app.js` 的 `initSync()` 上面，**要看就去那边看**，别在这边重写一遍。
+
      ⚠️ 点了会重载页面 —— 没保存的正文靠草稿（scheduleDraft）兜底，恢复横幅会出来。
         所以这个按钮别做得太显眼，也别做成自动触发。 */
   function initSync() {
@@ -2274,11 +2359,18 @@
       try { sessionStorage.setItem('ee-sync', String(Date.now())); } catch (e) { /* ignore */ }
       btn.classList.add('is-busy');
       btn.disabled = true;
-      var url = location.pathname + location.search;
-      // 清掉上一次留下的 ?v=… 再加新的，免得参数越滚越长
-      url = url.replace(/([?&])v=[^&#]*/g, '$1').replace(/[?&](?=$|#)/, '');
-      location.replace(url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now());
+      location.replace(syncVariantUrl());
     });
+  }
+
+  /* 当前页面的一份「路径带重复斜杠」的副本（和 app.js 里同名函数一致）。
+     ⚠️ 斜杠数量每次不同，否则第二次点就命中缓存了。 */
+  function syncVariantUrl() {
+    // ⚠️ file:// 下 location.origin 是字符串 "null"（见 app.js 同名函数的注释）
+    if (!/^https?:$/.test(location.protocol)) return location.href;
+    var slashes = new Array(2 + (Date.now() % 200) + 1).join('/');
+    var path = location.pathname.replace(/^\/+/, '');
+    return location.origin + '/' + slashes + path + location.search + location.hash;
   }
 
   /* ======================================================================

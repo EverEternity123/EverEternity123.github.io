@@ -194,24 +194,53 @@
      Pages 对**所有**文件都回 `Cache-Control: max-age=600`。所以就算用
      `cache:'no-cache'` 让浏览器去问，CDN 也会把自己那份旧副本直接给它 ——
      表现就是「写作台明明改完了，刷新还是老样子」。
-     唯一的办法是**让 URL 变**：带上一个参数，CDN 就当成另一个文件，回去取新的。
 
-     · 小文件（列表数据 / 单篇正文 / 顺序 / 站点信息）—— **每次加载都带新戳**。
-       它们加起来几十 KB，不值得为省这点流量去冒「改了看不见」的风险。
-     · 大文件（全量 posts.json，1MB，只有搜索才下）—— **只在点过「同步最新」
-       之后才带戳**。否则每次点一下搜索框都要重下 1MB。 */
+     ⚠️⚠️ 这段注释以前写的是「唯一的办法是**让 URL 变**：带上一个参数」——
+        **那个结论是错的**。2026-10-06 实测（`_preview/_probe-cdn-cache.py`）：
+        **query 不进缓存键**，加 `?v=<时间戳>` 完全没用（两个全新参数拿到的是
+        同一个缓存对象，`Age` 连续累加）。真正管用的是**让路径变**，
+        见下面 `initSync()` 的注释和它调的 `syncVariantUrl()`。
+
+     ⚠️ 那这里的 `bust()` 还有用吗？——**基本没有**，但留着不删：
+        它在 URL 上挂 `?v=`，对缓存无效；可是**只要页面本身是变体路径**
+        （`https://…///index.html`），这些**相对路径**就会自动继承变体，
+        于是请求照样能 MISS 回源。也就是说「绕缓存」这件事现在由
+        `initSync()` 的整页导航负责，`bust()` 只是历史遗留、不再承担职责。
+        （大文件那条「只在点过同步之后才带戳」的省流量逻辑同样已失效，
+          但保留着不会造成任何问题，改掉反而容易碰坏别的调用点。） */
   var SYNC_KEY = 'ee-sync';
 
   function syncStamp() {
     try { return sessionStorage.getItem(SYNC_KEY) || ''; } catch (e) { return ''; }
   }
 
-  /* always=true → 每次调用都生成一个新戳（拿最新）；
-     always=false → 只有用户点过「同步最新」才带戳，否则原样返回（吃缓存）。 */
+  /* always=true  → 把路径换成一个**新变体**（必定回源，拿最新）；
+     always=false → 只有页面本身已经是变体路径时才自然绕开，否则原样返回（吃缓存）。
+
+     ⚠️ 这里用的就是上面说的「路径变体」：`data/index.json` → `data///index.json`。
+        小文件（index.json 44KB / order.json 1.4KB / 单篇正文）**故意**每次都换变体，
+        换来「写作台改完、刷新就能看到」—— 这点回源流量对个人博客完全值得。
+     ⚠️⚠️ 但 `always=false` 那条**千万别**也改成路径变体：
+        它服务的是 1MB 的 posts.json（只有点搜索才下），
+        每次都回源会把「省流量」这件事彻底做反。 */
   function bust(url, always) {
-    var v = always ? String(Date.now()) : syncStamp();
+    if (always) return bustPath(url);
+    var v = syncStamp();
     if (!v) return url;
     return url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + v;
+  }
+
+  /* 给路径中间塞进 3~202 个斜杠 —— CDN 会把它当成另一个文件，必 MISS 回源。
+     ⚠️ 只能用「重复斜杠」：浏览器的 URL 规范化会吃掉 `/./` 和 `/../` 段，
+        但空段（连续斜杠）会原样保留（实测见 `_preview/_probe-path-variants2.py`）。
+     ⚠️ 斜杠必须加在**路径中间**，不能写成 `//data/…` —— 那是协议相对 URL。
+     ⚠️ 斜杠数量要和 `syncVariantUrl()` 对齐（那边拼完整 URL 时前面还会多一个
+        `/`，所以那边是 `2 + …`，这里直接就是 `3 + …`，两边最终都是 3~202 个）。 */
+  function bustPath(url) {
+    var m = url.lastIndexOf('/');
+    if (m < 0) return url;
+    var n = 3 + (Date.now() % 200);
+    return url.slice(0, m) + new Array(n + 1).join('/') + url.slice(m + 1);
   }
 
   function fetchJSON(url, fresh) {
@@ -394,26 +423,63 @@
   }
 
   /* ---------- 「同步最新」按钮 ----------
+     ⚠️⚠️ 这个按钮以前是「加一个 ?v=<时间戳> 重新进当前页」，**那是错的**。
+        2026-10-06 用 `_preview/_probe-cdn-cache.py` 实测了 GitHub Pages 的 CDN：
+          · 所有文件都回 `Cache-Control: max-age=600`；
+          · **query 不进缓存键** —— 拿两个全新的参数
+            `?probeA=<戳>` / `?probeB=<戳>` 交替请求，
+            返回的是**同一个缓存对象**（`Age` 一路 455→456→457→458 连续累加），
+            `X-Cache` 全程 HIT；
+          · 连**请求头** `Cache-Control: no-cache`（= 浏览器硬刷新 Ctrl+F5）、
+            `max-age=0`、`Pragma: no-cache`、`no-store` 也全部 HIT。
+        结论：**加参数没用，硬刷新也没用** —— 这就是主人说的
+        「按完还是旧的，要等十分钟」的真正原因（等够 600 秒缓存过期才行）。
 
-     GitHub Pages 对页面和资源都回 `Cache-Control: max-age=600`，所以
-     「写作台刚改完 → 刷新」经常还是旧页面，重进也一样（CDN 那份还没过期）。
-     点这个按钮会带一个**独一无二的**参数重新进当前页：
-       · CDN 把它当新地址 → 回去取一份新 HTML；
-       · 新 HTML 里资源地址带的是**内容 hash**（发布时打的，见
-         .tools/stamp-assets.py），内容变过就自动是新地址，缓存被绕开。
-     数据那几份 JSON 每次加载本来就带时间戳（见上面的 bust()），不归它管。 */
+     ✅ 真正有效的是**让路径本身变**。CDN 的缓存键是**整个路径字符串**：
+        `/data/index.json`、`/data//index.json`、`/data///index.json`
+        在它眼里是三个不同的对象，每个的第一次请求都必然 MISS 回源 → 拿到最新。
+        （实测 `_preview/_probe-path-variants.py`：`/data//index.json` 回
+          `X-Cache: MISS`、`Age: 0`；而 `/data/index.json` 回 HIT、`Age: 485`。）
+
+     ⚠️ 为什么用「重复斜杠」而不是 `/./` 或 `/../`：
+        浏览器的 URL 规范化会**吃掉** `.` 和 `..` 段，但**空段（连续斜杠）原样保留**。
+        实测（`_preview/_probe-path-variants2.py` D2）：
+          `new URL('…/data/./index.json').pathname` → `/data/index.json`（被吃）
+          `new URL('…/data//index.json').pathname` → `/data//index.json`（保留）
+        连 `fetch('/data//index.json')` 实际发出的 request URL 都是原样的。
+     ⚠️ 斜杠必须加在**路径中间**（`origin + '/' + slashes + path`）。
+        写成 `//x.html` 会被浏览器当成**协议相对 URL**（host 变成 x.html），彻底跑偏。
+     ⚠️ 变体自己也会被缓存（实测 Age 同样会累加），所以斜杠数量**每次都得不一样**。
+        这里用 `Date.now() % 200 + 2`：2~201 个斜杠，200 毫秒内连点两次才会撞上。
+
+     ✅ 附带好处：导航过去之后，页面里所有**相对路径**（`assets/js/app.js`、
+        `data/index.json`、`data/c/<id>.json`…）都会**自动继承**这段变体路径，
+        于是一次点击把 HTML / CSS / JS / 数据**全部**刷新，不用逐个处理。
+        （`bust()` 里那个 `?v=` 因此其实不起作用，留着只是为了不改动别处；
+          真正管用的是路径变体。） */
   function initSync() {
     var btn = $('.sync-btn');
     if (!btn) return;
     btn.addEventListener('click', function () {
+      // 保留这个标记：bust(url, false) 靠它决定大文件要不要绕（见上面 bust()）
       try { sessionStorage.setItem(SYNC_KEY, String(Date.now())); } catch (e) { /* ignore */ }
       btn.classList.add('is-busy');
       btn.disabled = true;
-      var url = location.pathname + location.search;
-      // 清掉上一次留下的 ?v=… 再加新的，免得参数越滚越长
-      url = url.replace(/([?&])v=[^&#]*/g, '$1').replace(/[?&](?=$|#)/, '');
-      location.replace(url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now());
+      location.replace(syncVariantUrl());
     });
+  }
+
+  /* 当前页面的一份「路径带重复斜杠」的副本 —— CDN 当成另一个文件，回源取新的。
+     ⚠️ 斜杠数量每次不同（见上面 initSync 的注释），否则第二次点就命中缓存了。 */
+  function syncVariantUrl() {
+    // ⚠️ file:// 打开时 location.origin 是字符串 "null"，拼出来的地址是坏的。
+    //    绕 CDN 缓存只对线上有意义 → 本地原样重载就行（项目硬约束：
+    //    双击 write.html 必须能用，别让这个按钮把它弄坏）。
+    if (!/^https?:$/.test(location.protocol)) return location.href;
+    var slashes = new Array(2 + (Date.now() % 200) + 1).join('/');
+    // 去掉 pathname 开头已有的斜杠，免得反复点越滚越长
+    var path = location.pathname.replace(/^\/+/, '');
+    return location.origin + '/' + slashes + path + location.search + location.hash;
   }
 
   /* ---------- 回到顶部 ---------- */

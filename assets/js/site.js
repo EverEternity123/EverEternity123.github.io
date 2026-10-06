@@ -15,12 +15,24 @@
 
   var SITE_URL = 'data/site.json';
 
-  /* ⚠️ 一定要带时间戳。GitHub Pages 对所有文件都回 `Cache-Control: max-age=600`，
-     光用 `cache:'no-cache'` 只是让浏览器去问，CDN 照样把自己那份旧副本给它 ——
-     表现就是「写作台改完站点信息，刷新还是旧的」。URL 变了它才会去取新的。
-     （app.js 里有同样的一份，见那边的 bust()；这里页面小，不引依赖。） */
+  /* ⚠️⚠️ 这里以前是「加一个 ?v=<时间戳>」—— **对 CDN 无效**。
+     2026-10-06 实测（`_preview/_probe-cdn-cache.py`）：GitHub Pages 的 CDN
+     **缓存键不含 query** —— 两个全新的参数拿到的是**同一个缓存对象**
+     （`Age` 连续累加），连请求头 `Cache-Control: no-cache`（硬刷新）也照样 HIT。
+     真正管用的是**让路径变**：路径中间塞进重复斜杠，
+       data/site.json  →  data///site.json
+     CDN 把它当成另一个文件，第一次请求必定 MISS 回源 → 拿到最新。
+     ⚠️ 只能用「重复斜杠」：浏览器的 URL 规范化会吃掉 `/./` 和 `/../`，
+        但空段（连续斜杠）原样保留（实测见 `_preview/_probe-path-variants2.py`）。
+     ⚠️ 斜杠加在**路径中间**，不能写成 `//data/site.json` —— 那是协议相对 URL。
+     ⚠️ 这里**故意**每次换一个新变体（每次回源）：site.json 才 2KB，
+        换来「写作台改完站点信息、刷新就能看到」，值。
+        （app.js 那边同理，见它的 `bust()` / `initSync()`。） */
   function busted(url) {
-    return url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now();
+    var m = url.lastIndexOf('/');
+    if (m < 0) return url;
+    var n = 3 + (Date.now() % 200);          // 3~202 个斜杠，和 app.js 那边同口径
+    return url.slice(0, m) + new Array(n + 1).join('/') + url.slice(m + 1);
   }
 
   function esc(s) {
