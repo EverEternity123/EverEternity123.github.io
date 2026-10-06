@@ -1452,7 +1452,16 @@
   }
 
   function readForm() {
-    // 固定顺序，方便看 diff
+    // ⚠️ 这里的**字面量顺序就是写进 posts.json 的键顺序**（手机保存时写作台是
+    //    直接 PUT 这个 JSON 上去的，中间没有 Python 帮忙重排）。
+    //    所以必须逐字对齐权威顺序（定义在 .tools/set-ai.py / migrate-score.py 的 ORDER）：
+    //      id | title | date | tags | lede | source | sourceGone
+    //         | content | author | hidden | ai | aiOff | score
+    //    2026-10-06 之前 ai / score 被排在 content / author 前面 —— 主人手机上
+    //    保存《动物农场》后远端键序变成 `…lede, ai, score, content, author`，
+    //    跟本地逐字节对不上（内容一字没改，纯键序问题）。**别再挪这几个键。**
+    //    条件字段（sourceGone / hidden / aiOff / score）先写占位值，
+    //    下面统一 delete 掉不要的 —— delete 不会打乱剩下键的相对顺序。
     var out = {
       id: state.editing ? state.editing.id : '',
       title: $('#f-title').value.trim(),
@@ -1464,15 +1473,19 @@
       // 的兜底会把它补到对象**末尾**，字段顺序就乱了（verify-write-fields 抓到的）。
       lede: state.editing ? (state.editing.lede || '') : '',
       source: $('#f-source').value.trim(),
+      // 原文已删除的允许**没有链接** —— 地址都被作者删没了，只剩这个标记
+      sourceGone: $('#f-source-gone').checked ? true : null,
+      content: $('#f-content').value,
+      author: $('#f-author').value.trim(),
+      hidden: $('#f-hidden').checked,
       ai: $('#f-ai').value.trim(),
+      // 开关关掉 = 文字留着但不显示（aiOff: true）。没有文字时两个键都别留。
+      aiOff: ($('#f-ai').value.trim() && !$('#f-ai-on').checked) ? true : null,
       // 值得阅读程度（0–100）。**必须写在字面量里**：写在下面那条
       // 「带上将来可能新增的字段」的兜底之后的话，编辑旧文章时
       // state.editing 里的老 score 会被补回来 —— 用户明明清空了框，
       // 一保存分数又回来了。
-      score: scoreFromInput(),
-      content: $('#f-content').value,
-      author: $('#f-author').value.trim(),
-      hidden: $('#f-hidden').checked
+      score: scoreFromInput()
     };
     // 带上将来可能新增的字段，编辑旧文章时不会把它们弄丢
     // （导语 lede 就是靠这条：写作台已经没有它的输入框了，但老文章的值
@@ -1489,13 +1502,8 @@
     if (!out.source) delete out.source;
     // 值得阅读程度留空 = 不写这个键（前台就不显示）。0 是合法分数，不走这条。
     if (out.score === undefined) delete out.score;
-    // 原文已删除的允许**没有链接** —— 地址都被作者删没了，只剩这个标记
-    if ($('#f-source-gone').checked) out.sourceGone = true;
-    else delete out.sourceGone;
-    // 开关关掉 = 文字留着但不显示（aiOff: true）。
-    // 没有文字时两个键都别留 —— 不留空字段。
-    if (out.ai && !$('#f-ai-on').checked) out.aiOff = true;
-    else delete out.aiOff;
+    if (out.sourceGone !== true) delete out.sourceGone;
+    if (out.aiOff !== true) delete out.aiOff;
     return out;
   }
 
@@ -2135,6 +2143,35 @@
   }
 
   /* ======================================================================
+     页头的「同步最新」按钮（2026-10-06 加）
+     ======================================================================
+
+     写作台**自己**也被 GitHub Pages 缓存 10 分钟（所有文件都是
+     `Cache-Control: max-age=600`）。所以「我刚改了写作台的布局/字段，手机上打开
+     还是老样子」这件事，在这里同样会发生 —— 而写作台恰恰是主人手机上用得最多的页面。
+
+     前台那五个页面用的是 `app.js` 的 `initSync()`；写作台不加载 `app.js`，
+     所以这里再绑一次。两处逻辑一样，都只是「带一个独一无二的参数重新进当前页」：
+       · CDN 把它当新地址 → 回去取一份新 HTML；
+       · 新 HTML 里资源地址带的是**内容 hash**（发布时由 .tools/stamp-assets.py 打），
+         内容变过就自动是新地址，缓存一起被绕开。
+     ⚠️ 点了会重载页面 —— 没保存的正文靠草稿（scheduleDraft）兜底，恢复横幅会出来。
+        所以这个按钮别做得太显眼，也别做成自动触发。 */
+  function initSync() {
+    var btn = $('.sync-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      try { sessionStorage.setItem('ee-sync', String(Date.now())); } catch (e) { /* ignore */ }
+      btn.classList.add('is-busy');
+      btn.disabled = true;
+      var url = location.pathname + location.search;
+      // 清掉上一次留下的 ?v=… 再加新的，免得参数越滚越长
+      url = url.replace(/([?&])v=[^&#]*/g, '$1').replace(/[?&](?=$|#)/, '');
+      location.replace(url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + Date.now());
+    });
+  }
+
+  /* ======================================================================
      绑定
      ====================================================================== */
 
@@ -2336,6 +2373,9 @@
      ====================================================================== */
 
   document.addEventListener('DOMContentLoaded', function () {
+    // ⚠️ 放在最前面：下面有好几个提前 return 的分支（没配仓库、没令牌），
+    //    写在后面的话那些情况下按钮就是个死的。
+    initSync();
     bind();
     renderRepoInfo();
     renderConnect();

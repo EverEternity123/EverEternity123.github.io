@@ -139,22 +139,74 @@
         continue;
       }
 
-      /* ---- 列表 ---- */
+      /* ---- 列表 ----
+
+         ⚠️ 这里必须同时容忍两种写法，否则「一个列表」会被拆成好几个 <ol>，
+            每一项都从 1. 重新数（主人 2026-10-06 报的「工作台里是 1.2.3.，
+            预览却是 1.1.1.」就是这个）：
+
+         ① **项与项之间空一行** —— 手写时很自然，CommonMark 里这叫「松列表」，
+            仍然**是同一个列表**。第一版遇到空行就 break，于是每项各成一个 <ol>。
+         ② **缩进的非空行 = 本项的续行** —— 作者的写法是序号行写加粗小标题、
+            正文另起一行缩进三格：
+                1. **权力腐化革命**
+                   动物推翻人类，却复制了暴政。
+            第一版把「不是列表标记」当成列表结束，于是正文那行被甩出去变成
+            独立段落，后面的 2. 又开一个新 <ol> —— 这才是《动物农场》里
+            14 项全长成「1.」的真正原因。
+
+         ③ 首项数字不是 1 时补 `<ol start="N">`（标准做法，不然 3. 开头会显示成 1.）。 */
       var ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
       var olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
       if (ulMatch || olMatch) {
         var ordered = !!olMatch;
-        var items = [];
+        var items = [];      // 每项是一个「行数组」，最后再拼
+        var buf = null;      // 正在累积的那一项
+        var startNum = null;
+        var flush = function () { if (buf !== null) { items.push(buf); buf = null; } };
+
         while (i < lines.length) {
+          var raw = lines[i];
           var m = ordered
-            ? lines[i].match(/^\s*\d+\.\s+(.*)$/)
-            : lines[i].match(/^\s*[-*+]\s+(.*)$/);
-          if (!m) break;
-          items.push('<li>' + inline(esc(m[1])) + '</li>');
-          i++;
+            ? raw.match(/^\s*(\d+)\.\s+(.*)$/)
+            : raw.match(/^\s*[-*+]\s+(.*)$/);
+          if (m) {
+            flush();
+            if (ordered && startNum === null) startNum = parseInt(m[1], 10);
+            buf = [ordered ? m[2] : m[1]];
+            i++;
+            continue;
+          }
+          /* 空行：往后看第一个非空行。还是本列表的东西 → 松列表，跳过空行继续；
+             否则列表到此为止（空行后面接段落是最常见的情况，不能吞进来）。 */
+          if (isBlank(raw)) {
+            var j = i;
+            while (j < lines.length && isBlank(lines[j])) j++;
+            if (j >= lines.length) break;
+            var nx = lines[j];
+            var nxIsItem = ordered ? /^\s*\d+\.\s+/.test(nx) : /^\s*[-*+]\s+/.test(nx);
+            var nxIsCont = !isBlockStart(nx) && /^\s+\S/.test(nx);   // 缩进的续行
+            if (!nxIsItem && !nxIsCont) break;
+            i = j;
+            continue;
+          }
+          /* 缩进的非空行 = 本项的续行（作者把正文写在序号行下面一行）。 */
+          if (buf !== null && /^\s+\S/.test(raw) && !isBlockStart(raw)) {
+            buf.push(raw.trim());
+            i++;
+            continue;
+          }
+          break;
         }
+        flush();
+
         var tag = ordered ? 'ol' : 'ul';
-        out.push('<' + tag + '>' + items.join('') + '</' + tag + '>');
+        var attr = (ordered && startNum !== null && startNum !== 1)
+          ? ' start="' + startNum + '"' : '';
+        var html = items.map(function (ls) {
+          return '<li>' + inline(esc(ls.join('\n'))).replace(/\n/g, '<br>') + '</li>';
+        }).join('');
+        out.push('<' + tag + attr + '>' + html + '</' + tag + '>');
         continue;
       }
 
