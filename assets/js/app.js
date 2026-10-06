@@ -748,9 +748,17 @@
 
   /* ---------- 文章页 ---------- */
   /* AI 摘要与评价（折叠块，**默认收起**）+ 查看原文（外链按钮）。
-     ⚠️ 用 textContent + CSS 的 white-space:pre-wrap 渲染纯文本，**不走 MD.render** ——
-        它不是用户写的正文，没必要支持 Markdown，也省得摘要里一个符号把版面搞乱。
-        textContent 顺带把 XSS 也挡掉了。
+     ⚠️ 2026-10-06 起**走 MD.render 渲染 Markdown**（主人报：摘要在写作台里写了
+        `**粗体**`，文章页上星号却原样露出来了 —— 那篇是《全球视野下的投资机会》）。
+        之前是 textContent + white-space:pre-wrap 的纯文本，改的原因就是主人要在
+        摘要里用 Markdown。踩过的坑与仍然成立的两条：
+        · XSS 照样挡得住 —— MD.render 内部**先 esc() 再解析**（见 markdown.js），
+          `<script>` 会被转义成文本。**别因为「要渲染 Markdown」就自己拼 HTML**。
+        · ⚠️ 一旦走 MD.render，CSS 那边**必须**去掉 white-space:pre-wrap ——
+          分段现在由 <p> 负责，留着 pre-wrap 会把 <p> 之间的换行也显示成空行。
+          对应样式在 style.css 的 .ai-intro-inner 里（2026-10-06 一起加的）。
+        · 摘要里的 `[链接](url)` 是**主人自己写的**，所以放开渲染是安全的；
+          它跟正文共用同一个渲染器，行为一致，别再单独写一套。
      展开动画在 CSS 里（.ai-intro-body 的 grid-template-rows 0fr↔1fr），
      这里只负责翻 class 和 aria —— **别再往 body 上挂 hidden**，
      display:none 会把过渡整个掐掉，点了就是「啪」一下出来。
@@ -776,7 +784,9 @@
     var srcEl = $('#post-source');
 
     if (showAi && inner) {
-      inner.textContent = text;
+      // 见函数头注释：2026-10-06 起走 MD.render（支持 **粗体** / *斜体* / 列表 / 链接…）。
+      // XSS 由 MD.render 内部的 esc() 挡，别改成拼字符串。
+      inner.innerHTML = MD.render(text);
       if (btn) {
         btn.addEventListener('click', function () {
           var open = btn.getAttribute('aria-expanded') === 'true';

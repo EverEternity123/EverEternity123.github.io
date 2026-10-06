@@ -18,8 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="assets/css/style.css?v=ababe543">
-<link rel="stylesheet" href="assets/css/admin.css?v=2f09c44d">
+<link rel="stylesheet" href="assets/css/style.css?v=ab165549">
+<link rel="stylesheet" href="assets/css/admin.css?v=134e4706">
 <script>
 (function () {
   try {
@@ -278,16 +278,24 @@
          开关本身在上面那排 .check-row 里（id 是 #f-source-gone，
          写进 JSON 是 sourceGone: true）。地址找不回来的话，上面的链接留空也行。 -->
 
-    <!-- AI 摘要与评价：纯文本，段落之间空一行（文章页上按空行分段渲染）。
-         文章页默认收起，点了才展开；留空 = 那块根本不出现。
+    <!-- AI 摘要与评价：**支持 Markdown**（2026-10-06 起）。
+         文章页上由 app.js 的 MD.render() 渲染，所以 `**粗体**`、`*斜体*`、`- 列表`、
+         `[链接](网址)` 这些都会生效 —— 跟正文是**同一个渲染器**，写法完全一致。
+         段落之间空一行即可；留空 = 那块根本不出现；文章页默认收起，点了才展开。
          长度给得宽一点 —— 长文的摘要 + 评价会写到三四百字。
          ⚠️ 旁边那个「显示 AI 摘要」开关只管**显不显示**，不会删掉这里写的文字
             （写进 JSON 是 aiOff: true）；关掉时输入框会变灰，逻辑在 admin.js 的
-            syncAiSwitch()。开关本身在上面那排 .check-row 里。 -->
+            syncAiSwitch()。开关本身在上面那排 .check-row 里。
+         ⚠️ 这里是**纯文本框、没有实时预览**（正文那个编辑器才有工具栏）。
+            别为了「所见即所得」把 textarea 换成 contenteditable —— 保存路径读的是
+            `$('#f-ai').value`，换了就等于把整条保存链子重写一遍。 -->
     <label class="field">
       <span>AI 摘要与评价（可留空）</span>
       <textarea id="f-ai" rows="4" maxlength="1500"
                 placeholder="摘要写一段；空一行，再用「评价：」起头写一段。短文可以只写评价。"></textarea>
+      <!-- ⚠️ 选择器要写成 `.field .field-hint`（见 admin.css）才压得过 `.field > span`
+          （那是字段名的样式，字号 13px）—— 不然这条提示跟字段名长得一模一样。 -->
+      <span class="field-hint">支持 Markdown：**加粗**、*斜体*、`代码`、[链接](网址)、- 列表、&gt; 引用</span>
     </label>
 
     <!-- 「隐藏文章」开关也在上面那排 .check-row 里（id 是 #f-hidden）。
@@ -467,6 +475,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>
-<script src="assets/js/admin.js?v=1dbc5f35"></script>
+<script src="assets/js/admin.js?v=76a6042b"></script>
 </body>
 </html>

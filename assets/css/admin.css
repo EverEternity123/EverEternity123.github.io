@@ -59,6 +59,19 @@
   letter-spacing: .3px;
 }
 
+/* 字段下面的小提示（2026-10-06 加：告诉主人 AI 摘要那一栏支持 Markdown）。
+   ⚠️ 必须写成 `.field .field-hint`（0,2,0）压过上面的 `.field > span`（0,1,1）——
+      不然字号被顶回 13px、跟字段名长得一模一样，看着像两个标签。
+      也顺手把 margin 收掉：textarea 下面再挂 7px 会显得那一栏特别松。 */
+.field .field-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  opacity: .9;
+  margin: -2px 0 0;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
 .admin input[type="text"],
 .admin input[type="password"],
 .admin input[type="date"],

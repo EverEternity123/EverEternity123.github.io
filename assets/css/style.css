@@ -702,7 +702,13 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
 
 /* 展开后那块。字号比正文小一号、左侧一条竖线 —— 一眼看出它不是文章正文。
    ⚠️ 字体 2026-10-04 从无衬线改成**和正文同一套衬线**（主人要求）：
-      区分「这不是正文」现在只靠字号 + 背景 + 左边框，别再把它调回无衬线。 */
+      区分「这不是正文」现在只靠字号 + 背景 + 左边框，别再把它调回无衬线。
+   ⚠️ 2026-10-06：内容改由 app.js 的 **MD.render** 渲染（支持 Markdown）。
+      所以这里**删掉了 white-space: pre-wrap** —— 分段现在归 <p> 管，
+      留着 pre-wrap 会把 <p> 与 <p> 之间的换行也显示成一条空行，整块变得稀稀拉拉。
+      下面那一串子元素样式就是补上来的排版（正文那套 .post-body 规则**不会**作用到这里，
+      容器不同、选择器也不匹配）。字号基准 15px 比正文 17.5px 小一号，
+      间距也统一按 0.95em 收紧 —— 不然一块摘要会被撑得比正文还长。 */
 .ai-intro-inner {
   padding: 15px 17px;
   background: var(--bg-soft);
@@ -713,8 +719,93 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   font-size: 15px;
   line-height: 1.85;
   text-align: justify;
-  white-space: pre-wrap;          /* 段落靠空行分开，不用自己拼 <p> */
 }
+
+/* 段落：最后一个不留底边距，否则收起动画末尾会多出一条空白 */
+.ai-intro-inner p { margin: 0 0 .95em; }
+.ai-intro-inner p:last-child { margin-bottom: 0; }
+
+/* 列表：跟正文一套语言（序号/圆点是主题色），只是小一号 */
+.ai-intro-inner ul,
+.ai-intro-inner ol { margin: 0 0 .95em; padding-left: 1.35em; }
+.ai-intro-inner li { margin-bottom: .3em; }
+.ai-intro-inner li:last-child { margin-bottom: 0; }
+.ai-intro-inner ul li::marker { color: var(--accent); }
+.ai-intro-inner ol li::marker {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: .88em;
+}
+
+/* 行内标记。⚠️ strong 把字色提回 --text —— 容器本身是 --text-2（弱一档），
+   不加粗还好，一加粗就显得「糊」；提一档才看得出这是重点。 */
+.ai-intro-inner strong { font-weight: 700; color: var(--text); }
+.ai-intro-inner em { font-style: italic; }
+
+.ai-intro-inner a {
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent-line);
+  transition: border-color .18s ease;
+}
+.ai-intro-inner a:hover { border-bottom-color: var(--accent); }
+
+.ai-intro-inner code {
+  font-family: var(--font-mono);
+  font-size: .86em;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: .12em .42em;
+  color: var(--accent);
+}
+
+/* 引用与代码块：摘要里很少见，但渲染器支持，就给个能看的样式 —— 别让它裸奔 */
+.ai-intro-inner blockquote {
+  margin: 0 0 .95em;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text-3);
+}
+.ai-intro-inner blockquote p { margin: 0; }
+
+.ai-intro-inner .md-pre {
+  margin: 0 0 .95em;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+.ai-intro-inner .md-pre code {
+  background: none; border: 0; padding: 0;
+  color: var(--text); font-size: 13px;
+}
+
+.ai-intro-inner hr {
+  margin: 1.4em auto;
+  width: 52px;
+  border: 0;
+  border-top: 2px solid var(--border-2);
+}
+
+.ai-intro-inner img { max-width: 100%; border-radius: var(--radius-sm); }
+
+/* ⚠️ 标题**收着点** —— 摘要是个小方框，MD.render 默认会给出 24px 的大标题，
+   放进来比正文标题还抢眼，整块头重脚轻。统一压到 16px，靠字重和间距区分层级。 */
+.ai-intro-inner h1,
+.ai-intro-inner h2,
+.ai-intro-inner h3,
+.ai-intro-inner h4,
+.ai-intro-inner h5,
+.ai-intro-inner h6 {
+  margin: 1em 0 .5em;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0;
+}
+.ai-intro-inner > :first-child { margin-top: 0; }
 
 /* 不喜欢动效的人（系统设置里关掉了），就别给他动 */
 @media (prefers-reduced-motion: reduce) {

@@ -29,7 +29,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon-16.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/css/style.css?v=ababe543">
+<link rel="stylesheet" href="assets/css/style.css?v=ab165549">
 <script>
 (function () {
   try {
@@ -109,7 +109,10 @@
        ⚠️ 这一行里的**分享按钮每篇都要有**，所以 #ai-intro 不能再像以前那样
            「两个按钮都没内容 → 整块 remove()」—— 改成各个按钮自己决定去留，
            容器只负责「有文章就显示」（逻辑在 app.js 的 initAiIntro()）。
-       ⚠️ AI 那块是纯文本（textContent + CSS 的 pre-wrap），不走 Markdown 渲染。 -->
+       ⚠️ AI 那块 2026-10-06 起**走 Markdown 渲染** —— app.js 用 MD.render() 填
+          #ai-intro-inner，所以里面会出现 <p>/<strong>/<ul> 这些元素。
+          排版样式在 style.css 的 .ai-intro-inner（**别再按纯文本给它加
+          white-space: pre-wrap**，那会把 <p> 之间的换行也显示出来）。 -->
   <div class="ai-intro" id="ai-intro" hidden>
     <div class="ai-tools">
       <button class="ai-toggle" id="ai-toggle" type="button"
@@ -199,6 +202,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script>window.EE_POST_ID = "12-20";</script><!-- p/<id>.html 里会被换成这一篇自己的 id，这样不用靠 ?p= 也能知道是哪篇 -->
-<script src="assets/js/app.js?v=e09382bb"></script>
+<script src="assets/js/app.js?v=a46af125"></script>
 </body>
 </html>

@@ -339,6 +339,110 @@
   }
 
   /* ======================================================================
+     产物：data/index.json（列表页用）+ data/c/<id>.json（文章页用）
+     ======================================================================
+     ⚠️⚠️ 为什么写作台也得管这两个文件：
+        它们平时是 `.tools/build-index.py` 在**电脑上发布时**生成的「产物」。
+        但主人主要在**手机上**发文 / 改文 —— 写作台保存只改 data/posts.json 的话，
+        产物不会跟着更新，于是：
+          · 文章页（读 data/c/<id>.json）还是**旧正文**；
+          · 列表页（读 data/index.json）还是旧标题 / 旧摘要 / 旧阅读时长。
+        而且**刷新永远刷不出来** —— 数据源本身就是旧的，不是缓存问题。
+        2026-10-06 主人报的「改了《全球视野下的投资机会》，网页没变」就是这个：
+        线上 posts.json 已经是新正文（7495 字），data/c/p-mutvv133.json 还是旧的（7806 字）。
+     ⚠️ 结构必须和 build-index.py **完全一致**（那边有 `--selfcheck` 拿 node 对着 JS 比）。
+        改任何一边都要同时改另一边：
+          · index.json 一行 = 该篇**除 content / ai 之外的所有键**
+                            + excerpt（lede 优先，否则正文前 92 字）+ words（charCount）
+          · data/c/<id>.json = { id, content }（ai / aiOff 有才写）
+     ⚠️ excerpt 的 limit 是 **92**（build-index.py 的 EXCERPT_LIMIT）——
+        MD.excerpt() 自己的默认值是 88，**必须显式传 92**，不然卡片摘要会跟以前不一样。
+     ⚠️ 三个文件是**三次提交**（Contents API 一次只能写一个文件）。顺序：
+        posts.json（唯一真源，先写，保证主人的改动一定落盘）→ 两个产物。
+        产物写失败只会让页面慢一拍，不会丢内容；界面会提示「请再点一次保存」。 */
+  var EXCERPT_LIMIT = 92;
+
+  function jsonText(obj) {
+    // 和 build-index.py 的 _write_json 一致：indent=2 + ensure_ascii=False + 末尾换行
+    return JSON.stringify(obj, null, 2) + '\n';
+  }
+
+  function indexRowOf(p) {
+    var row = {};
+    Object.keys(p).forEach(function (k) {
+      if (k === 'content' || k === 'ai') return;   // 正文不进列表
+      row[k] = p[k];
+    });
+    row.excerpt = p.lede || MD.excerpt(p.content || '', EXCERPT_LIMIT);
+    row.words = MD.charCount(p.content || '');
+    return row;
+  }
+
+  function postBodyOf(p) {
+    var body = { id: p.id, content: p.content || '' };
+    if (p.ai) body.ai = p.ai;
+    if (p.aiOff === true) body.aiOff = true;
+    return body;
+  }
+
+  /* 写一个文本文件（Contents API）。文件还不存在时 sha 传 null → 直接创建。 */
+  function putTextFile(path, text, message, sha) {
+    var body = {
+      message: message,
+      content: b64encode(text),
+      branch: CFG.branch || 'main'
+    };
+    if (sha) body.sha = sha;
+    return gh(contentsPathOf(path), { method: 'PUT', body: body });
+  }
+
+  /* 拿一个文件当前的 sha；文件不存在（第一次用）返回 null。
+     ⚠️ 写已有文件**必须**带 sha，不然 GitHub 回 422。 */
+  function shaOfFile(path) {
+    return gh(contentsPathOf(path) + '?ref=' + encodeURIComponent(CFG.branch || 'main'))
+      .then(function (d) { return (d && d.sha) ? d.sha : null; })
+      .catch(function (err) {
+        if (err.status === 404) return null;
+        throw err;
+      });
+  }
+
+  /* 把两个产物按**当前 state.posts** 整份重建。
+     列表页读 index.json、文章页读 c/<id>.json，两个都要写。 */
+  function syncArtifacts(post, opts) {
+    opts = opts || {};
+    var ordered = state.posts.slice().sort(byDateDesc);
+    var id = post.id;
+    return Promise.all([
+      shaOfFile('data/c/' + id + '.json'),
+      shaOfFile('data/index.json')
+    ]).then(function (shas) {
+      var jobs = [];
+      // 被删掉的那篇：它的单篇文件留着也无害（index.json 不再引用它，
+      // 永远不会被请求；build-index.py 下次发布会清掉），这里不单独删。
+      if (!opts.deleted) {
+        jobs.push(putTextFile('data/c/' + id + '.json', jsonText(postBodyOf(post)),
+                              '更新正文缓存：' + post.title, shas[0]));
+      }
+      jobs.push(putTextFile('data/index.json',
+                            jsonText(ordered.map(indexRowOf)),
+                            (opts.deleted ? '重建列表缓存：' : '更新列表缓存：') + post.title,
+                            shas[1]));
+      return Promise.all(jobs);
+    });
+  }
+
+  /* 产物是「后置」的：失败了不影响这次保存本身，只提示主人再点一次。
+     ⚠️ 不要把它的失败冒泡给调用方 —— 那会让 doSave 走回滚分支，
+        把明明已经提交成功的文章从界面上抹掉。 */
+  function syncArtifactsQuietly(post, opts) {
+    return syncArtifacts(post, opts).catch(function (err) {
+      toast('正文已保存，但页面缓存没跟上（' + err.message + '）—— ' +
+            '请再点一次「保存并发布」', true);
+    });
+  }
+
+  /* ======================================================================
      连接 / 锁定
      ====================================================================== */
 
@@ -1617,6 +1721,10 @@
         var sha = data && data.commit && data.commit.sha ? data.commit.sha.slice(0, 7) : '';
         toast('已提交' + (sha ? '（' + sha + '）' : '') +
               (post.hidden ? '，这篇是隐藏的' : '') + '，网站约 1 分钟后更新');
+        // ⚠️ 顺手重建两个产物 —— 不重建的话文章页 / 列表页读到的还是旧数据，
+        //    而且「刷新」永远刷不出来（数据源本身是旧的，不是缓存问题）。
+        //    失败也不影响这次保存，所以走 quietly 版本（见它的注释）。
+        return syncArtifactsQuietly(post);
       })
       .catch(function (err) {
         // 提交失败：回滚内存状态，避免界面与远端不一致
@@ -1641,6 +1749,8 @@
         clearDraft(id);
         renderList();
         toast('已删除，网站约 1 分钟后更新');
+        // 列表页读的是产物 —— 不重建的话那张卡片还会留在首页上
+        return syncArtifactsQuietly(removed || { id: id, title: title }, { deleted: true });
       })
       .catch(function (err) {
         if (removed) state.posts.push(removed);
