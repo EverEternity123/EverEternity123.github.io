@@ -291,8 +291,8 @@
             `$('#f-ai').value`，换了就等于把整条保存链子重写一遍。 -->
     <label class="field">
       <span>AI 摘要与评价（可留空）</span>
-      <textarea id="f-ai" rows="4" maxlength="1500"
-                placeholder="摘要写一段；空一行，再用「评价：」起头写一段。短文可以只写评价。"></textarea>
+      <textarea id="f-ai" rows="4" maxlength="2000"
+                placeholder="摘要写一段；空一行，再用 **评价** 起头写评价。短文可以只写评价。"></textarea>
       <!-- ⚠️ 选择器要写成 `.field .field-hint`（见 admin.css）才压得过 `.field > span`
           （那是字段名的样式，字号 13px）—— 不然这条提示跟字段名长得一模一样。 -->
       <span class="field-hint">支持 Markdown：**加粗**、*斜体*、`代码`、[链接](网址)、- 列表、&gt; 引用</span>
@@ -471,7 +471,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="assets/js/markdown.js?v=30496650"></script>
-<script src="assets/js/site.js?v=e34c1bb7"></script>
+<script src="assets/js/site.js?v=37365d83"></script>
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>

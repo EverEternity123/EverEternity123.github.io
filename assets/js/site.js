@@ -25,10 +25,32 @@
      ⚠️ 只能用「重复斜杠」：浏览器的 URL 规范化会吃掉 `/./` 和 `/../`，
         但空段（连续斜杠）原样保留（实测见 `_preview/_probe-path-variants2.py`）。
      ⚠️ 斜杠加在**路径中间**，不能写成 `//data/site.json` —— 那是协议相对 URL。
-     ⚠️ 这里**故意**每次换一个新变体（每次回源）：site.json 才 2KB，
-        换来「写作台改完站点信息、刷新就能看到」，值。
-        （app.js 那边同理，见它的 `bust()` / `initSync()`。） */
+
+     ⚠️⚠️⚠️ 但**「每次都换变体」是错的**（2026-10-06 主人报「打开文章比以前慢」）：
+        变体是 CDN 眼里的**全新对象**，第一次请求必定 MISS 回源。
+        每一页都为一个 2KB 的 site.json 跑一趟源站，不划算。
+        → 现在只在「点过页头『同步最新』之后的 `SYNC_TTL` 窗口内」才切变体。
+        ⚠️ 判断逻辑和 app.js 里那份**必须一致**（同一个 `ee-sync` key、
+          同一个时长）—— 两处走样的话，会出现「首页数据是新的、页脚还是旧的」
+          这种半新半旧的鬼状态。 */
+  var SYNC_KEY = 'ee-sync';
+  var SYNC_TTL = 11 * 60 * 1000;      // CDN 的 max-age 是 600s，多留 1 分钟余量
+
+  function syncFresh() {
+    try {
+      var v = Number(global.sessionStorage.getItem(SYNC_KEY) || 0);
+      if (!v) return false;
+      if (Date.now() - v > SYNC_TTL) {
+        global.sessionStorage.removeItem(SYNC_KEY);
+        return false;
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* 平时原样返回（命中 CDN 缓存，快）；新鲜窗口内换成路径变体（回源，拿最新）。 */
   function busted(url) {
+    if (!syncFresh()) return url;
     var m = url.lastIndexOf('/');
     if (m < 0) return url;
     var n = 3 + (Date.now() % 200);          // 3~202 个斜杠，和 app.js 那边同口径
@@ -40,7 +62,9 @@
   }
 
   function load() {
-    return fetch(busted(SITE_URL), { cache: 'no-cache' }).then(function (res) {
+    /* ⚠️ 不加 `cache:'no-cache'` —— 那会让浏览器每次都绕过**自己**的缓存去问
+       CDN（等于每次多一次网络往返）。默认模式下次再打开、10 分钟内零请求。 */
+    return fetch(busted(SITE_URL)).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });

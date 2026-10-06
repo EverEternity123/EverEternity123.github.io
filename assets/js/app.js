@@ -201,33 +201,50 @@
         同一个缓存对象，`Age` 连续累加）。真正管用的是**让路径变**，
         见下面 `initSync()` 的注释和它调的 `syncVariantUrl()`。
 
-     ⚠️ 那这里的 `bust()` 还有用吗？——**基本没有**，但留着不删：
-        它在 URL 上挂 `?v=`，对缓存无效；可是**只要页面本身是变体路径**
-        （`https://…///index.html`），这些**相对路径**就会自动继承变体，
-        于是请求照样能 MISS 回源。也就是说「绕缓存」这件事现在由
-        `initSync()` 的整页导航负责，`bust()` 只是历史遗留、不再承担职责。
-        （大文件那条「只在点过同步之后才带戳」的省流量逻辑同样已失效，
-          但保留着不会造成任何问题，改掉反而容易碰坏别的调用点。） */
+     ⚠️⚠️⚠️ 但是 —— **「每次都换变体」同样是错的**（2026-10-06 主人报
+        「打开文章比以前慢了，文字多的手机要 5 秒以上」）。
+        变体在 CDN 眼里是**全新的对象**，第一次请求必定 MISS 回源；
+        于是每一页都要为 index.json / order.json / site.json / 单篇正文
+        各跑一趟源站，文章越长越明显。
+        实测（`_preview/_probe-post-perf2.py`，最长那篇 77KB）：
+          0.91s DOMContentLoaded
+          → 1.28s 三个数据请求（全是变体）
+          → **1.91s** 才发出 `data/c/<id>.json`（它得等 index.json 回来）
+          → 2.90s 正文出现
+        → 所以现在改成：**平时一律走普通路径（吃 CDN 缓存）**，
+          只有点了页头「同步最新」之后的 `SYNC_TTL` 窗口内才切成变体。
+          「改完立刻想看新的」和「平时打开要快」两头都占住。
+
+     ⚠️ 为什么用「时间窗」而不是「一直有效到关掉标签页」：
+        变体的新鲜度只需要撑到 CDN 那份缓存过期（600s）为止 ——
+        过了那一刻，普通路径拿到的**本来就是新的**，再走变体纯属白付回源成本。
+     ⚠️ 顺带去掉了原来的 `{cache:'no-cache'}`：它让浏览器每次都绕过**自己**的
+        缓存去问 CDN（等于每次都多一次网络往返）。默认模式下次再打开、
+        10 分钟内是**零请求**的。反正浏览器缓存和 CDN 缓存是同一个 600s 窗口，
+        过期时间几乎同步，不会因此更旧。 */
   var SYNC_KEY = 'ee-sync';
 
-  function syncStamp() {
-    try { return sessionStorage.getItem(SYNC_KEY) || ''; } catch (e) { return ''; }
+  /* 点过「同步最新」之后的「新鲜窗口」：CDN 的 max-age 是 600s，多留 1 分钟余量。 */
+  var SYNC_TTL = 11 * 60 * 1000;
+
+  /* 现在是不是处在「刚点过同步最新」的窗口里。是 → 所有数据请求都换成路径变体。
+     ⚠️ 过期时**顺手把 key 清掉**，否则下一次判断还要再算一遍。 */
+  function syncFresh() {
+    try {
+      var v = Number(sessionStorage.getItem(SYNC_KEY) || 0);
+      if (!v) return false;
+      if (Date.now() - v > SYNC_TTL) {
+        sessionStorage.removeItem(SYNC_KEY);
+        return false;
+      }
+      return true;
+    } catch (e) { return false; }
   }
 
-  /* always=true  → 把路径换成一个**新变体**（必定回源，拿最新）；
-     always=false → 只有页面本身已经是变体路径时才自然绕开，否则原样返回（吃缓存）。
-
-     ⚠️ 这里用的就是上面说的「路径变体」：`data/index.json` → `data///index.json`。
-        小文件（index.json 44KB / order.json 1.4KB / 单篇正文）**故意**每次都换变体，
-        换来「写作台改完、刷新就能看到」—— 这点回源流量对个人博客完全值得。
-     ⚠️⚠️ 但 `always=false` 那条**千万别**也改成路径变体：
-        它服务的是 1MB 的 posts.json（只有点搜索才下），
-        每次都回源会把「省流量」这件事彻底做反。 */
-  function bust(url, always) {
-    if (always) return bustPath(url);
-    var v = syncStamp();
-    if (!v) return url;
-    return url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + v;
+  /* 数据地址：平时原样返回（命中 CDN 缓存，快）；
+     新鲜窗口内换成路径变体（回源，拿最新）。 */
+  function bust(url) {
+    return syncFresh() ? bustPath(url) : url;
   }
 
   /* 给路径中间塞进 3~202 个斜杠 —— CDN 会把它当成另一个文件，必 MISS 回源。
@@ -243,8 +260,8 @@
     return url.slice(0, m) + new Array(n + 1).join('/') + url.slice(m + 1);
   }
 
-  function fetchJSON(url, fresh) {
-    return fetch(bust(url, fresh), { cache: 'no-cache' }).then(function (res) {
+  function fetchJSON(url) {
+    return fetch(bust(url)).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });
@@ -255,9 +272,9 @@
      ⚠️ 这个兜底是有意留的：万一 index.json 没生成 / 没部署上去，
         站点必须还能正常用，只是慢回原来的样子。 */
   function fetchPosts() {
-    return fetchJSON(INDEX_URL, true).catch(function (err) {
+    return fetchJSON(INDEX_URL).catch(function (err) {
       console.warn('[app] data/index.json 没拿到，退回全量 posts.json', err);
-      return fetchJSON(DATA_URL, true);
+      return fetchJSON(DATA_URL);
     });
   }
 
@@ -265,7 +282,7 @@
     return Promise.all([
       fetchPosts(),
       // order.json 是可选的第二个请求：读不到、404、解析失败 —— 一律当成「没排过序」
-      fetch(bust(ORDER_URL, true), { cache: 'no-cache' })
+      fetch(bust(ORDER_URL))
         .then(function (res) { return res.ok ? res.json() : null; })
         .catch(function () { return null; })
     ]).then(function (both) {
@@ -316,7 +333,7 @@
      两种情况会走到这儿：① data/c/ 还没生成（部署漏了一步）
      ② 手上这份是老的 posts.json（正文还内联在列表数据里）。 */
   function fetchFullPost(post) {
-    return fetchJSON(DATA_URL, true).then(function (list) {
+    return fetchJSON(DATA_URL).then(function (list) {
       if (!Array.isArray(list)) return;
       for (var i = 0; i < list.length; i++) {
         if (list[i] && list[i].id === post.id) {
@@ -327,18 +344,49 @@
     }).catch(function () { /* 兜底也失败就算了，正文会是空的 */ });
   }
 
+  /* 进页面就**先把这一篇的正文请求发出去**，不等 index.json。
+     ⚠️ 为什么能提前：是哪一篇靠 `?p=<id>` / `p/<id>.html` 就确定了，
+        根本不需要等列表数据回来。原来写成 `loadPosts().then(preloadPostContent)`，
+        于是正文那次请求要**串行排在 index.json 后面**等一个来回 ——
+        实测（`_preview/_probe-post-perf2.py`，长文 77KB）：
+        另外三个数据请求 1.28s 发出，正文那个一直等到 **1.91s** 才发。
+     ⚠️ 没带 id（直接打开 post.html）时不预取 —— 那种情况得等列表出来才知道
+        要显示哪一篇，提前不了。 */
+  var contentPrefetch = null;
+
+  function startContentPrefetch() {
+    if (!$('#post-body')) return;                 // 列表页 / 归档页没有正文，别白费请求
+    var id = STATIC_ID || param('p');
+    if (!id) return;
+    contentPrefetch = {
+      id: id,
+      promise: fetchJSON(CONTENT_DIR + encodeURIComponent(id) + '.json')
+        .catch(function (err) {
+          console.warn('[app] 单篇正文预取失败，稍后按需重试', err);
+          return null;
+        })
+    };
+  }
+
   /* 文章页专用：进渲染之前先把这一篇的正文取回来。
      ⚠️ 只在「列表数据里没有正文」时才发请求 —— 退回全量 posts.json 的情况下
-        content 本来就在，不会白白多打一次。 */
+        content 本来就在，不会白白多打一次。
+     ⚠️ 能复用 startContentPrefetch() 的结果就复用（**同一个 id** 才复用，
+        否则 ?p= 指向的文章不存在、落到第一篇时，会拿错正文）。 */
   function preloadPostContent() {
     var post = currentPost();
     if (!post || post.content) return Promise.resolve();
-    return fetchJSON(CONTENT_DIR + encodeURIComponent(post.id) + '.json', true)
-      .then(function (d) { return applyContent(post, d) ? null : fetchFullPost(post); })
-      .catch(function (err) {
-        console.warn('[app] 单篇正文没拿到，退回全量', err);
-        return fetchFullPost(post);
-      });
+    var pf = contentPrefetch;
+    var p = (pf && pf.id === post.id)
+      ? pf.promise
+      : fetchJSON(CONTENT_DIR + encodeURIComponent(post.id) + '.json')
+          .catch(function (err) {
+            console.warn('[app] 单篇正文没拿到，退回全量', err);
+            return null;
+          });
+    return p.then(function (d) {
+      return applyContent(post, d) ? null : fetchFullPost(post);
+    });
   }
 
   function setLoading() {
@@ -455,13 +503,15 @@
      ✅ 附带好处：导航过去之后，页面里所有**相对路径**（`assets/js/app.js`、
         `data/index.json`、`data/c/<id>.json`…）都会**自动继承**这段变体路径，
         于是一次点击把 HTML / CSS / JS / 数据**全部**刷新，不用逐个处理。
-        （`bust()` 里那个 `?v=` 因此其实不起作用，留着只是为了不改动别处；
-          真正管用的是路径变体。） */
+     ⚠️ 但这一次导航**只解决「这一次」**：变体路径会被缓存 600s，
+        而且它会一直传染给后面点开的每一页。所以真正让「平时打开快」的是
+        `syncFresh()` 那个 11 分钟的时间窗 —— 窗口一过，数据请求自动切回
+        普通路径吃 CDN 缓存（页面本身的变体路径也早就缓存住了，不影响）。 */
   function initSync() {
     var btn = $('.sync-btn');
     if (!btn) return;
     btn.addEventListener('click', function () {
-      // 保留这个标记：bust(url, false) 靠它决定大文件要不要绕（见上面 bust()）
+      // 这个标记 = 「接下来的 11 分钟都别吃缓存」的开关，见上面 syncFresh()
       try { sessionStorage.setItem(SYNC_KEY, String(Date.now())); } catch (e) { /* ignore */ }
       btn.classList.add('is-busy');
       btn.disabled = true;
@@ -1127,6 +1177,11 @@
       // ↑ 末了这一下是摘遮罩（.ee-site-pending）。**成功失败都得摘**，
       //   否则 <head> 里藏起来的那几块就一直不露出来了。
     }
+
+    /* ⚠️ 正文的预取要**和 loadPosts() 同时发出去**，别塞进它的 then 里。
+       见 startContentPrefetch() 的注释：塞进 then 会让正文那次请求
+       白白多等一个 index.json 的来回。 */
+    startContentPrefetch();
 
     loadPosts().then(function (list) {
       POSTS = list;
