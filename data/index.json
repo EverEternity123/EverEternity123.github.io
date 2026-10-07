@@ -1,5 +1,15 @@
 [
   {
+    "id": "p-muyarlba",
+    "title": "涛动周期论",
+    "date": "2026-10-08",
+    "tags": [],
+    "lede": "",
+    "author": "周金涛",
+    "excerpt": "111test",
+    "words": 7
+  },
+  {
     "id": "openai-722",
     "title": "如何看待 OpenAI 公开 722 份数学手稿，宣布解决包含「准黎曼猜想」的数百个数学问题？",
     "date": "2026-10-07",
