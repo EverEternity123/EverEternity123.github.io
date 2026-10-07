@@ -19,7 +19,7 @@
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css?v=ab165549">
-<link rel="stylesheet" href="assets/css/admin.css?v=01e916f2">
+<link rel="stylesheet" href="assets/css/admin.css?v=58d15e61">
 <script>
 (function () {
   try {
@@ -350,13 +350,34 @@
     <div id="preview-wrap" hidden>
       <div class="preview-label">预览</div>
       <!-- AI 摘要与评价（2026-10-07 加）。位置跟文章页一致：正文**上面**。
-           内容由 admin.js 的 renderPreviewAi() 填，样式直接复用 style.css 的
-           .ai-intro-inner（写作台本来就加载了 style.css）。
+           内容由 admin.js 的 renderPreviewAi() 填。
+           ⚠️ 结构**照抄文章页**（post.html 的 #ai-intro）—— 主人 2026-10-07 要求
+              「预览里的 AI 摘要也要能折叠收纳」。折叠动画全靠 style.css 的
+              `.ai-intro.open .ai-intro-body { grid-template-rows: 1fr }`，
+              自己另起一套（比如 max-height）迟早跟文章页长得不一样。
+           ⚠️ 默认给 `open`：预览的用途就是「看内容」，收起态会让人以为摘要没渲染出来。
+              （文章页默认收起是为了不占正文位置，预览没这个顾虑。）
            ⚠️ 开关关掉时只留一条灰字说明、不渲染内容 —— 文章页那时也不显示，
               不然预览会骗人。 -->
       <div id="preview-ai" hidden>
-        <div class="preview-label">AI 摘要与评价</div>
-        <div class="ai-intro-inner" id="preview-ai-inner"></div>
+        <div class="ai-intro open" id="preview-ai-box">
+          <div class="ai-tools">
+            <button class="ai-toggle" id="preview-ai-toggle" type="button"
+                    aria-expanded="true" aria-controls="preview-ai-body">
+              <span class="ai-label">AI 摘要与评价</span>
+              <svg class="ai-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="ai-intro-body" id="preview-ai-body">
+            <div class="ai-intro-clip">
+              <div class="ai-intro-inner" id="preview-ai-inner"></div>
+            </div>
+          </div>
+        </div>
         <div class="preview-note" id="preview-ai-off" hidden>
           这篇关掉了「显示 AI 摘要与评价」—— 文章页不会出现这一块（文字还在，随时能勾回来）。
         </div>
@@ -487,6 +508,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>
-<script src="assets/js/admin.js?v=810645ce"></script>
+<script src="assets/js/admin.js?v=f03570ff"></script>
 </body>
 </html>

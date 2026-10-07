@@ -1840,7 +1840,8 @@
 
   /* 预览里的 AI 摘要与评价（2026-10-07 主人要求）。
      它跟正文一样支持 Markdown，光看文本框看不出渲染效果，所以预览要带上。
-     位置和文章页一致：正文**上面**。
+     位置和文章页一致：正文**上面**；**折叠形式和文章页也是同一套 class**
+     （`.ai-intro.open` ↔ `.ai-intro-body` 的 grid-template-rows 动画）。
      ⚠️ 三种情况要分清，别糊成一种：
        · 没写内容     → 整块不出现（文章页也是这样）
        · 写了但关掉开关 → **不渲染内容**，只留一条灰字说明
@@ -1853,6 +1854,8 @@
     var text = ((el && el.value) || '').trim();
     var inner = $('#preview-ai-inner');
     var off = $('#preview-ai-off');
+    var btn = $('#preview-ai-toggle');
+    var aiBox = $('#preview-ai-box');
     var on = $('#f-ai-on') ? $('#f-ai-on').checked : true;
     if (!text) {
       box.hidden = true;
@@ -1863,6 +1866,18 @@
     box.hidden = false;
     off.hidden = on;
     inner.innerHTML = on ? MD.render(text) : '';
+    /* 折叠：跟文章页 app.js 的 initAiIntro() **同一套切换**（class + aria-expanded），
+       样式全靠 style.css 的 `.ai-intro.open`，这里不碰任何尺寸。
+       ⚠️ 用 `onclick =` 赋值而不是 addEventListener —— 这个函数**每点一次预览都会跑**，
+          addEventListener 会一层层叠上去（点一下切换好几次）。
+       ⚠️ 折叠状态**不重置**：主人收起来之后再看预览，还是收着的。 */
+    if (btn && aiBox) {
+      btn.onclick = function () {
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        aiBox.classList.toggle('open', !open);
+      };
+    }
   }
 
   function togglePreview() {

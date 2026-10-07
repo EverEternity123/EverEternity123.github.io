@@ -373,11 +373,16 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 }
 
 /* ---------- 预览里的 AI 摘要与评价（2026-10-07） ----------
-   位置跟文章页一致：正文**上面**。
-   ⚠️ 内容样式**直接复用** style.css 的 .ai-intro-inner —— 写作台本来就加载了
-      style.css，别再给这里另写一套 Markdown 排版（迟早跟文章页分叉）。 */
+   位置跟文章页一致：正文**上面**；折叠形式也**照抄文章页**（结构 + class 都一样），
+   所以这里只做两件事：给它一个下边距、把文章页那套 margin 修正掉。
+   ⚠️ 排版样式一律复用 style.css（`.ai-intro` / `.ai-tools` / `.ai-intro-body` /
+      `.ai-intro-inner`）—— 写作台本来就加载了 style.css，别另写一套，迟早分叉。 */
 #preview-ai { margin-bottom: 18px; }
-#preview-ai .preview-label { margin-bottom: 8px; }
+
+/* ⚠️ 文章页的 `.ai-intro` 是 `margin: -14px 0 30px` —— 那个**负值**是为了抵掉
+   `.post-header` 自带的 34px 下边距（见 style.css 里的注释）。预览里它上面是
+   「预览」那个小标签，负 margin 会把它压住，所以在这里归零。 */
+#preview-ai .ai-intro { margin: 0; }
 
 /* 开关关掉时的说明条。用虚线和弱字色 —— 一眼看出「这里本来有东西、只是关了」，
    而不是「预览坏了」。 */
