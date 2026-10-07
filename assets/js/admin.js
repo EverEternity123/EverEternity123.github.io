@@ -644,7 +644,7 @@
       state.filterTag = '';
       state.q = '';
       var sb = $('#admin-search');
-      if (sb) sb.value = '';
+      if (sb) { sb.value = ''; sb.__eeLastQ = null; }
       var sc = $('#btn-search-clear');
       if (sc) sc.hidden = true;
     }
@@ -2790,21 +2790,40 @@
 
     /* ---------- 搜索（口径跟站外首页一致，另加「作者」） ---------- */
     var searchBox = $('#admin-search');
+    function runAdminSearch() {
+      var q = searchBox.value.trim().toLowerCase();
+      // ⚠️ 「上次搜过什么」记在**输入框自己身上**，不能放闭包变量 ——
+      //    renderList() 在批量编辑时会把搜索框清空，而那个函数够不到这个闭包。
+      if (q === searchBox.__eeLastQ) return;
+      searchBox.__eeLastQ = q;
+      state.q = q;
+      var clr = $('#btn-search-clear');
+      if (clr) clr.hidden = !searchBox.value;
+      renderList();
+    }
     if (searchBox) {
-      searchBox.addEventListener('input', function () {
-        state.q = searchBox.value.trim().toLowerCase();
-        var clr = $('#btn-search-clear');
-        if (clr) clr.hidden = !searchBox.value;
-        renderList();
+      /* ⚠️ 中文输入法打字时 `input` 事件**在拼音上屏之前**就会一直触发
+         （跟站外首页是同一个坑，主人 2026-10-07 一并提的）。
+         composition 期间一律不搜；上屏后再补搜一次（Chrome 的 compositionend
+         后面还会跟一个 input，Safari 不跟，所以两边都调 runAdminSearch，靠
+         searchLastQ 去重）。 */
+      var searchComposing = false;
+      searchBox.addEventListener('compositionstart', function () { searchComposing = true; });
+      searchBox.addEventListener('compositionend', function () {
+        searchComposing = false;
+        runAdminSearch();
+      });
+      searchBox.addEventListener('input', function (e) {
+        if (searchComposing || e.isComposing) return;
+        runAdminSearch();
       });
     }
     var searchClear = $('#btn-search-clear');
     if (searchClear) {
       searchClear.addEventListener('click', function () {
         if (searchBox) { searchBox.value = ''; searchBox.focus(); }
-        state.q = '';
-        searchClear.hidden = true;
-        renderList();
+        searchBox.__eeLastQ = null;          // 清空后同名的词也要能再搜一次
+        runAdminSearch();
       });
     }
 

@@ -779,12 +779,36 @@
          所以**等用户真的要搜了**才去取全量 —— 正常浏览一个字都不下。
          焦点一到就开始取（比等按键再早一点），取回来自动重搜一次。 */
       searchEl.addEventListener('focus', startFullText);
-      searchEl.addEventListener('input', function () {
-        state.q = searchEl.value.trim().toLowerCase();
+
+      /* ⚠️ 中文/日文输入法打字时，`input` 事件**在拼音上屏之前**就会一直触发 ——
+         「yuanzi」到「原子」的过程中，每敲一个字母都来一次。不挡住的话，
+         列表会拿半截拼音去搜，满屏「没有找到相关的文章」（主人 2026-10-07 报的）。
+         挡法：compositionstart ~ compositionend 之间一律不搜。
+         ⚠️ 只信 `e.isComposing` 不够 —— Safari 部分版本的 input 事件不带这个属性，
+            所以再挂一个自己的开关兜底。
+         ⚠️ 上屏后必须**补搜一次**：Chrome 的 compositionend 后面还会跟一个 input，
+            能自动补上；Safari 不跟，所以在 compositionend 里也主动搜一次。
+            两条路都走同一个 runSearch()，用 lastQ 去重，不会白搜两遍。 */
+      var composing = false;
+      var lastQ = null;
+      function runSearch() {
+        var q = searchEl.value.trim().toLowerCase();
+        if (q === lastQ) return;
+        lastQ = q;
+        state.q = q;
         render();
         if (state.q && !FULL_TEXT_DONE) {
           startFullText().then(function (ok) { if (ok) render(); });
         }
+      }
+      searchEl.addEventListener('compositionstart', function () { composing = true; });
+      searchEl.addEventListener('compositionend', function () {
+        composing = false;
+        runSearch();
+      });
+      searchEl.addEventListener('input', function (e) {
+        if (composing || e.isComposing) return;
+        runSearch();
       });
     }
 
@@ -811,7 +835,8 @@
     function match(p) {
       if (state.tag && (p.tags || []).indexOf(state.tag) === -1) return false;
       if (!state.q) return true;
-      var hay = [p.title, p.lede || '', (p.tags || []).join(' '), p.content || '']
+      var hay = [p.title, p.lede || '', (p.tags || []).join(' '),
+                 p.author || '', p.content || '']
                   .join(' ').toLowerCase();
       return hay.indexOf(state.q) !== -1;
     }
