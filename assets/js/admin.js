@@ -1838,6 +1838,33 @@
       });
   }
 
+  /* 预览里的 AI 摘要与评价（2026-10-07 主人要求）。
+     它跟正文一样支持 Markdown，光看文本框看不出渲染效果，所以预览要带上。
+     位置和文章页一致：正文**上面**。
+     ⚠️ 三种情况要分清，别糊成一种：
+       · 没写内容     → 整块不出现（文章页也是这样）
+       · 写了但关掉开关 → **不渲染内容**，只留一条灰字说明
+                          （文章页那时也不显示，预览不能骗人）
+       · 写了且开着   → 正常渲染 */
+  function renderPreviewAi() {
+    var box = $('#preview-ai');
+    if (!box) return;              // 壳还没更新（老 HTML），别把整页弄崩
+    var el = $('#f-ai');
+    var text = ((el && el.value) || '').trim();
+    var inner = $('#preview-ai-inner');
+    var off = $('#preview-ai-off');
+    var on = $('#f-ai-on') ? $('#f-ai-on').checked : true;
+    if (!text) {
+      box.hidden = true;
+      inner.innerHTML = '';
+      off.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    off.hidden = on;
+    inner.innerHTML = on ? MD.render(text) : '';
+  }
+
   function togglePreview() {
     var wrap = $('#preview-wrap');
     if (!wrap.hidden) {
@@ -1846,6 +1873,7 @@
       return;
     }
     $('#preview').innerHTML = MD.render($('#f-content').value);
+    renderPreviewAi();
     wrap.hidden = false;
     $('#btn-preview').textContent = '收起预览';
     wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });

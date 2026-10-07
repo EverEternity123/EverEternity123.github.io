@@ -19,7 +19,7 @@
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css?v=ab165549">
-<link rel="stylesheet" href="assets/css/admin.css?v=134e4706">
+<link rel="stylesheet" href="assets/css/admin.css?v=01e916f2">
 <script>
 (function () {
   try {
@@ -349,6 +349,18 @@
 
     <div id="preview-wrap" hidden>
       <div class="preview-label">预览</div>
+      <!-- AI 摘要与评价（2026-10-07 加）。位置跟文章页一致：正文**上面**。
+           内容由 admin.js 的 renderPreviewAi() 填，样式直接复用 style.css 的
+           .ai-intro-inner（写作台本来就加载了 style.css）。
+           ⚠️ 开关关掉时只留一条灰字说明、不渲染内容 —— 文章页那时也不显示，
+              不然预览会骗人。 -->
+      <div id="preview-ai" hidden>
+        <div class="preview-label">AI 摘要与评价</div>
+        <div class="ai-intro-inner" id="preview-ai-inner"></div>
+        <div class="preview-note" id="preview-ai-off" hidden>
+          这篇关掉了「显示 AI 摘要与评价」—— 文章页不会出现这一块（文字还在，随时能勾回来）。
+        </div>
+      </div>
       <div class="post-body preview" id="preview"></div>
     </div>
 
@@ -475,6 +487,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>
-<script src="assets/js/admin.js?v=a3276c39"></script>
+<script src="assets/js/admin.js?v=810645ce"></script>
 </body>
 </html>

@@ -372,6 +372,24 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
   text-transform: uppercase;
 }
 
+/* ---------- 预览里的 AI 摘要与评价（2026-10-07） ----------
+   位置跟文章页一致：正文**上面**。
+   ⚠️ 内容样式**直接复用** style.css 的 .ai-intro-inner —— 写作台本来就加载了
+      style.css，别再给这里另写一套 Markdown 排版（迟早跟文章页分叉）。 */
+#preview-ai { margin-bottom: 18px; }
+#preview-ai .preview-label { margin-bottom: 8px; }
+
+/* 开关关掉时的说明条。用虚线和弱字色 —— 一眼看出「这里本来有东西、只是关了」，
+   而不是「预览坏了」。 */
+.preview-note {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-3);
+  padding: 11px 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- 提示条 ---------- */
 /* 外观整套在 style.css 里（前台「复制链接」用的是同一个）。
    这里只抬高位置：写作台底部有一条固定的「保存并发布」操作条，
