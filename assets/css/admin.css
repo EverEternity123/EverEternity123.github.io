@@ -925,4 +925,82 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
 
   /* 标签总览：把手 + 标签名占第一行，输入框换到第二行吃满宽度（手指好点） */
   .tag-edit-list input.tag-to { flex: 1 1 100%; width: 100%; }
+
+  /* 列表每行的三个按钮（预览 / 编辑 / 删除）在窄屏上收紧一点，别把标题挤没 */
+  .admin-list .ops .btn { padding: 8px 9px; font-size: 13.5px; }
+  .draft-list .ops .btn { padding: 8px 10px; font-size: 13.5px; }
 }
+
+/* ==========================================================================
+   列表里的搜索（2026-10-07 主人要求）
+   —— 口径跟站外首页一致（标题 / 摘要 / 正文 / 标签），另加「作者」
+   ========================================================================== */
+.admin-search { position: relative; margin: 0 0 16px; }
+.admin-search .search-icon {
+  position: absolute; left: 12px; top: 50%;
+  width: 17px; height: 17px;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+/* ⚠️ 选择器要压过上面那条 `.admin input[type="search"]`（padding 13px 14px）——
+   不加 .admin-search 这一层的话图标会直接压在文字上。 */
+.admin .admin-search input[type="search"] {
+  padding: 11px 40px 11px 37px;
+  font-size: 15px;
+}
+.admin-search input::-webkit-search-cancel-button,
+.admin-search input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.admin-search .search-clear {
+  position: absolute; right: 7px; top: 50%;
+  width: 28px; height: 28px; padding: 0;
+  transform: translateY(-50%);
+  border: 0; border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  font-size: 19px; line-height: 1;
+  cursor: pointer;
+}
+.admin-search .search-clear:hover { color: var(--text); background: var(--bg-soft); }
+
+/* ==========================================================================
+   列表里就地预览正文（2026-10-07 主人要求）
+   —— 只渲染正文，不带 AI 摘要；再点一次「收起」
+   ========================================================================== */
+/* 展开预览时那一行要能换行，预览块才落得到下面一行 */
+.admin-list li.has-preview { flex-wrap: wrap; align-items: flex-start; }
+.row-preview {
+  flex: 0 0 100%;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 10px;
+  padding: 2px 0 6px 14px;
+  border-left: 3px solid var(--accent-line);
+  max-height: 60vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* 复用文章页 .post-body 的排版，只把字号收一点、去掉首尾外边距 */
+.row-preview-inner { font-size: 15.5px; line-height: 1.85; color: var(--text-2); }
+.row-preview-inner > :first-child { margin-top: 0; }
+.row-preview-inner > :last-child { margin-bottom: 0; }
+.row-preview-empty { color: var(--text-3); font-style: italic; }
+
+/* ==========================================================================
+   草稿箱（2026-10-07 主人要求）
+   ========================================================================== */
+.draft-list { list-style: none; margin: 0 0 24px; padding: 0; }
+.draft-list li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.draft-list .info { flex: 1; min-width: 0; }
+.draft-list .ttl {
+  font-family: var(--font-serif);
+  font-size: 16.5px; line-height: 1.5; margin-bottom: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.draft-list .meta { font-size: 12.5px; color: var(--text-3); display: flex; gap: 8px; flex-wrap: wrap; }
+.draft-list .ops { display: flex; gap: 2px; flex: none; }
+.draft-list .ops .btn { padding: 8px 12px; font-size: 14px; }

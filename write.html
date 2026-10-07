@@ -19,7 +19,7 @@
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css?v=ab165549">
-<link rel="stylesheet" href="assets/css/admin.css?v=58d15e61">
+<link rel="stylesheet" href="assets/css/admin.css?v=ef5ffdfa">
 <script>
 (function () {
   try {
@@ -108,8 +108,9 @@
       <h1>我的文章</h1>
       <div class="group">
         <span class="pill" id="count-pill">—</span>
-        <button class="btn" id="btn-batch">批量编辑</button>
+        <button class="btn" id="btn-tags">标签总览</button>
         <button class="btn" id="btn-site">站点信息</button>
+        <button class="btn" id="btn-drafts">草稿箱</button>
         <button class="btn btn-primary" id="btn-new">＋ 写新的</button>
       </div>
     </div>
@@ -118,10 +119,20 @@
          文章一多就得滚很久才看得见，所以挪到顶栏，再补这一句说明。 -->
     <p class="admin-hint">
       首页的介绍、关于页、页脚落款不在文章里 —— 点上面的「站点信息」改。
-      想一次调整好几篇文章的顺序、标签、公开状态，点「批量编辑」。
+      想调标签的先后、改名或合并，点「标签总览」；没写完 / 没保存的稿子在「草稿箱」里。
     </p>
 
     <div class="repo-strip" id="repo-strip"></div>
+
+    <!-- 搜索：跟站外首页同一个口径（标题 / 摘要 / 正文 / 标签），
+         外加「作者」—— 写作台里常要按作者找（2026-10-07 主人要求）。 -->
+    <div class="admin-search">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="admin-search" autocomplete="off" spellcheck="false"
+             placeholder="搜标题、摘要、正文、作者、标签…" aria-label="搜索文章">
+      <button class="search-clear" id="btn-search-clear" type="button" hidden
+              aria-label="清空搜索">×</button>
+    </div>
 
     <!-- 按标签筛文章：标签多了以后靠它找文章，交互和首页的标签栏一致 -->
     <div class="tagbar admin-tagbar" id="admin-tagbar" hidden></div>
@@ -151,6 +162,7 @@
     <div class="empty-note" id="list-empty" hidden>还没有文章，点右上角开始写第一篇。</div>
 
     <div class="admin-actions">
+      <button class="btn" id="btn-batch">批量编辑文章</button>
       <button class="btn" id="btn-refresh">刷新</button>
       <button class="btn" id="btn-export">导出备份</button>
       <button class="btn btn-ghost" id="btn-disconnect">断开连接</button>
@@ -493,10 +505,24 @@
 
     <div class="edit-actions">
       <div class="inner">
-        <button class="btn btn-primary" id="btn-tags-save">应用到列表</button>
+        <button class="btn btn-primary" id="btn-tags-save">保存并发布</button>
         <button class="btn" id="btn-tags-cancel">取消</button>
       </div>
     </div>
+  </section>
+
+  <!-- ================= 草稿箱 ================= -->
+  <section id="view-drafts" hidden>
+    <div class="admin-bar">
+      <button class="btn btn-ghost" id="btn-drafts-back">← 回到文章列表</button>
+      <div class="group">
+        <span class="pill" id="drafts-count">草稿箱</span>
+      </div>
+    </div>
+    <p class="lead">写作台每次编辑都会在这台设备的浏览器里留一份草稿（<b>不会</b>上传到仓库）。
+      这里能看到所有还没清掉的草稿 —— 点「继续写」把它调回编辑器，或者「删除」清掉。</p>
+    <ul class="draft-list" id="draft-list"></ul>
+    <div class="empty-note" id="drafts-empty" hidden>还没有草稿。</div>
   </section>
 
 </main>
@@ -508,6 +534,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>
-<script src="assets/js/admin.js?v=f03570ff"></script>
+<script src="assets/js/admin.js?v=ab751d94"></script>
 </body>
 </html>
