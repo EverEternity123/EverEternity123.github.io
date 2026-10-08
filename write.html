@@ -19,7 +19,7 @@
 <meta property="og:url" content="https://evereternity123.github.io/write.html">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css?v=ab165549">
-<link rel="stylesheet" href="assets/css/admin.css?v=ef5ffdfa">
+<link rel="stylesheet" href="assets/css/admin.css?v=68ad5448">
 <script>
 (function () {
   try {
@@ -501,6 +501,18 @@
     <ul class="tag-edit-list" id="tag-edit-list"></ul>
     <div class="empty-note" id="tags-empty" hidden>还没有任何标签。</div>
 
+    <!-- 未分类：一篇标签都没有的文章（2026-10-08 主人要求）。
+         别的标签是「有文章才出现」，这个必须常驻 —— 0 篇时也要显示，
+         否则标签一多就没人知道还有没有漏标的文章。 -->
+    <div class="tag-uncat" id="tag-uncat">
+      <div class="tag-uncat-head">
+        <span class="tag-uncat-name">未分类</span>
+        <span class="tag-count" id="tag-uncat-count">0 篇</span>
+      </div>
+      <p class="tag-uncat-note" id="tag-uncat-note">还没有标签的文章会列在这里。</p>
+      <ul class="tag-uncat-list" id="tag-uncat-list" hidden></ul>
+    </div>
+
     <div class="banner banner-warn" id="tags-summary" hidden></div>
 
     <div class="edit-actions">
@@ -534,6 +546,6 @@
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script src="write.config.js?v=896594e1"></script>
-<script src="assets/js/admin.js?v=e4b68f47"></script>
+<script src="assets/js/admin.js?v=7bf36e0e"></script>
 </body>
 </html>

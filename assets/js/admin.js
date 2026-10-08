@@ -1377,7 +1377,36 @@
         '</li>';
     }).join('');
 
+    renderUncat();
     renderTagsSummary();
+  }
+
+  /* 标签总览底部的「未分类」：一篇标签都没有的文章（2026-10-08 主人要求）。
+     ⚠️ 必须常驻显示（0 篇也显示）—— 别的标签没文章就不出现，这个要是也这样，
+        标签一多就没人知道还有没有漏标的文章。
+     只读展示，改标签还是走上面那些标签行。 */
+  function renderUncat() {
+    var box = $('#tag-uncat');
+    if (!box) return;
+    var items = state.posts.filter(function (p) {
+      return !(p.tags && p.tags.length);
+    });
+    $('#tag-uncat-count').textContent = items.length + ' 篇';
+    var note = $('#tag-uncat-note');
+    var list = $('#tag-uncat-list');
+    if (!items.length) {
+      note.textContent = '每篇文章都有标签。';
+      list.hidden = true;
+      list.innerHTML = '';
+      return;
+    }
+    note.textContent = '这些文章还没有标签：';
+    list.hidden = false;
+    list.innerHTML = items.map(function (p) {
+      return '<li><span class="tag-uncat-ttl">' +
+        esc(p.title || '(无标题)') + '</span>' +
+        '<span class="tag-count">' + fmtDate(p.date) + '</span></li>';
+    }).join('');
   }
 
   /* 读一遍列表当前的样子（还没点「应用到列表」）。

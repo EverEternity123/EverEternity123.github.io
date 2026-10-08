@@ -1004,3 +1004,33 @@ html[data-theme="dark"] .chip-x:hover { background: rgba(255, 255, 255, .13); }
 .draft-list .meta { font-size: 12.5px; color: var(--text-3); display: flex; gap: 8px; flex-wrap: wrap; }
 .draft-list .ops { display: flex; gap: 2px; flex: none; }
 .draft-list .ops .btn { padding: 8px 12px; font-size: 14px; }
+
+/* ==========================================================================
+   标签总览 · 未分类（2026-10-08 主人要求）
+   一篇标签都没有的文章。0 篇时也常驻显示（上面那条 .tag-uncat-note 会换文案）。
+   ========================================================================== */
+.tag-uncat {
+  margin: 0 0 24px;
+  padding: 14px 0 2px;
+  border-top: 2px solid var(--border);
+}
+.tag-uncat-head { display: flex; align-items: baseline; gap: 8px; }
+.tag-uncat-name { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.tag-uncat-note { margin: 6px 0 0; font-size: 12.5px; color: var(--text-3); }
+.tag-uncat-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.tag-uncat-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tag-uncat-ttl {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
