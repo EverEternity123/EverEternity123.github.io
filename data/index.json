@@ -1,5 +1,19 @@
 [
   {
+    "id": "windows",
+    "title": "Windows 的伟大之处在哪里？",
+    "date": "2026-10-22",
+    "tags": [
+      "科技"
+    ],
+    "lede": "",
+    "source": "https://www.zhihu.com/question/42367761/answer/2096621299485368408?share_code=q5QrWF0TnBvL&utm_psn=2101291067714827465",
+    "author": "阿菊",
+    "score": 88,
+    "excerpt": "Windows的伟大，从来不在于它写得有多优雅，而在于它替全人类抗下了过去四十年所有的历史技术债，把自个儿活成了一个深不见底的底层泥潭，却依然能让你双击运行二十五年前的程序。 我平时在……",
+    "words": 8457
+  },
+  {
     "id": "openai-3",
     "title": "为什么OpenAI发布的七百余个数学结果许多都依赖于高阶项的精确相消？",
     "date": "2026-10-18",
