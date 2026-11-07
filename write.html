@@ -303,7 +303,7 @@
             `$('#f-ai').value`，换了就等于把整条保存链子重写一遍。 -->
     <label class="field">
       <span>AI 摘要与评价（可留空）</span>
-      <textarea id="f-ai" rows="4" maxlength="2000"
+      <textarea id="f-ai" rows="4" maxlength="3000"
                 placeholder="摘要写一段；空一行，再用 **评价** 起头写评价。短文可以只写评价。"></textarea>
       <!-- ⚠️ 选择器要写成 `.field .field-hint`（见 admin.css）才压得过 `.field > span`
           （那是字段名的样式，字号 13px）—— 不然这条提示跟字段名长得一模一样。 -->
@@ -376,7 +376,7 @@
           <div class="ai-tools">
             <button class="ai-toggle" id="preview-ai-toggle" type="button"
                     aria-expanded="true" aria-controls="preview-ai-body">
-              <span class="ai-label">AI 摘要与评价</span>
+              <span class="ai-label">总结与评价</span>
               <svg class="ai-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                    aria-hidden="true">
