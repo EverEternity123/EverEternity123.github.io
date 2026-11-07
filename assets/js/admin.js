@@ -181,7 +181,7 @@
         看着像令牌坏了，其实是文件越过了 1MB 这道坎。
      ⚠️ 这不是「偶发故障」，别靠重试解决 —— 文件一旦过线，每次都会这样。
      ⚠️ raw 不返回 sha，所以 sha 仍然要从 Contents API 拿（见 ghTextFile）。 */
-  function ghRaw(path, ref) {
+  function ghRaw(path, ref, attempt) {
     var headers = { 'Accept': 'application/vnd.github.raw' };
     if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
     var url = API + path;
@@ -196,6 +196,16 @@
         err.status = res.status;
         throw err;
       });
+    }).catch(function (err) {
+      /* ⚠️ 2026-11-07：posts.json 已经 2.1MB，慢链路上会偶发「传到一半连接被掐断」
+         （实测 52 秒只收到 1.22MB 就 server closed abruptly，重试一次才拿全）。
+         Python 侧两个脚本早就对大响应重试，前端一直没有 —— 断一次就一直停在
+         「连接中…」。这里只重试**网络层**错误：401/403/404/409 这类 HTTP 错误
+         重试也没用，直接抛出去让人看见真正的原因。间隔别长，慢链路耗不起。 */
+      if (err && err.status) throw err;
+      if ((attempt || 0) >= 2) throw err;
+      return new Promise(function (resolve) { setTimeout(resolve, 400); })
+        .then(function () { return ghRaw(path, ref, (attempt || 0) + 1); });
     });
   }
 
@@ -2676,10 +2686,16 @@
 
       btn.disabled = true;
       btn.textContent = '连接中…';
+      /* 文章数据 2MB 出头，慢网络上要一分钟左右。8 秒还没好就说明白在等什么，
+         别让主人以为页面死在「连接中…」。 */
+      var slowHint = setTimeout(function () {
+        btn.textContent = '连接中…（文章较多，约需 1 分钟）';
+      }, 8000);
       connect(token).catch(function (err) {
         state.token = '';
         toast(err.message, true);
       }).then(function () {
+        clearTimeout(slowHint);
         btn.disabled = false;
         btn.textContent = '连接';
       });
@@ -2957,12 +2973,16 @@
     var btn = $('#btn-connect');
     btn.disabled = true;
     btn.textContent = '正在自动登录…';
+    var slowHint = setTimeout(function () {
+      btn.textContent = '正在自动登录…（文章较多，约需 1 分钟）';
+    }, 8000);
 
     connect(saved).catch(function (err) {
       setToken('');
       show('connect');
       toast('自动登录失败：' + err.message + '，请重新贴一次令牌', true);
     }).then(function () {
+      clearTimeout(slowHint);
       btn.disabled = false;
       btn.textContent = '连接';
     });
