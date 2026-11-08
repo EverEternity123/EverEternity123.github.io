@@ -1,7 +1,7 @@
 /* ==========================================================================
    markdown.js — 迷你 Markdown 渲染器（零依赖）
    支持：标题 / 粗体 / 斜体 / 行内代码 / 代码块 / 链接 / 图片
-        引用 / 有序无序列表 / 分隔线 / 段落换行
+        引用 / 有序无序列表 / 分隔线 / 表格 / 段落换行
         **裸网址自动变链接**（直接贴 https://… 就能点，不用写成 [文字](网址)）
    用法：MD.render('## 标题\n正文')  →  HTML 字符串
    ========================================================================== */
@@ -58,8 +58,12 @@
                     url + '</a>') + tail;
       });
 
-    // 粗体 **text**
-    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    /* 粗体 **text**。
+       ⚠️ 用 `[^\n]*?` 而不是 `[^*\n]+`：粗体里可以再嵌一层斜体
+       （`**对照英文原版（*The Intelligent Investor*）读**`），
+       老写法遇到中间那个单星号就配不上，整对 `**` 会原样露在页面上。
+       不跨行：一段里两处各自漏闭合时，下面 check-content.js 的按段奇偶校验才抓得住。 */
+    s = s.replace(/\*\*([^\n]*?)\*\*/g, '<strong>$1</strong>');
 
     // 斜体 *text*（避免误伤 ** ）
     s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
@@ -70,6 +74,36 @@
     });
 
     return s;
+  }
+
+  /* ---------- 表格 ----------
+     主人 2026-11-08 在手机上重写的书评里大量用了 Markdown 表格
+     （`| 维度 | 评分 |` + `|:---|:---|`），以前会整段露出管道符。
+
+     ⚠️ 判定刻意收得很紧：**当前行含 |，且下一行是分隔行，两行列数还得一样**。
+        正文里偶尔出现的管道符（「A|B」这种）不会被误吃成表格。
+         分隔行单元格：`:---` 左 / `---:` 右 / `:---:` 居中 / `---` 默认。 */
+  function splitCells(line) {
+    var s = String(line).trim();
+    if (s.charAt(0) === '|') s = s.slice(1);
+    if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+    return s.split('|').map(function (c) { return c.trim(); });
+  }
+
+  function isSepRow(line) {
+    if (String(line).indexOf('|') < 0) return false;
+    var cells = splitCells(line);
+    return cells.length > 0 &&
+           cells.every(function (c) { return /^:?-{3,}:?$/.test(c); });
+  }
+
+  function alignOf(spec, def) {
+    var left = spec.charAt(0) === ':';
+    var right = spec.charAt(spec.length - 1) === ':';
+    if (left && right) return 'center';
+    if (right) return 'right';
+    if (left) return 'left';
+    return def || '';
   }
 
   function render(src) {
@@ -88,6 +122,16 @@
              /^\s*>/.test(l) ||
              /^\s*([-*+]|\d+\.)\s+/.test(l) ||
              /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+    }
+
+    /* 表格从哪一行开始。段落循环也要用它，免得「表格紧跟在一段文字后面」
+       时被整段吞进去（表格行本身不匹配 isBlockStart）。 */
+    function isTableStart(k) {
+      return k + 1 < lines.length &&
+             !isBlank(lines[k]) &&
+             lines[k].indexOf('|') >= 0 &&
+             isSepRow(lines[k + 1]) &&
+             splitCells(lines[k]).length === splitCells(lines[k + 1]).length;
     }
 
     while (i < lines.length) {
@@ -210,9 +254,42 @@
         continue;
       }
 
+      /* ---- 表格 ----
+         表格自己带一套 `.md-table` 样式（不依赖父容器），所以正文、AI 折叠块、
+         写作台预览、行内预览四处都能直接用。列数以表头为准：少的补空、多的丢掉，
+         不会因为某一行列数不齐就整张表塌掉。
+         单元格走和正文一样的 inline(esc())，粗体 / 链接 / XSS 口径都一致。 */
+      if (isTableStart(i)) {
+        var head = splitCells(lines[i]);
+        var specs = splitCells(lines[i + 1]);
+        var aligns = specs.map(function (s) { return alignOf(s, ''); });
+        i += 2;
+        var rows = [];
+        while (i < lines.length && !isBlank(lines[i]) &&
+               lines[i].indexOf('|') >= 0 && !isSepRow(lines[i])) {
+          rows.push(splitCells(lines[i]));
+          i++;
+        }
+        function cellHTML(txt, tag, al) {
+          return '<' + tag + (al ? ' style="text-align:' + al + '"' : '') + '>' +
+                 inline(esc(txt)) + '</' + tag + '>';
+        }
+        var thead = '<thead><tr>' + head.map(function (c, k) {
+          return cellHTML(c, 'th', aligns[k]);
+        }).join('') + '</tr></thead>';
+        var tbody = '<tbody>' + rows.map(function (r) {
+          return '<tr>' + head.map(function (_, k) {
+            return cellHTML(r[k] == null ? '' : r[k], 'td', aligns[k]);
+          }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+        out.push('<div class="md-table-wrap"><table class="md-table">' +
+                 thead + tbody + '</table></div>');
+        continue;
+      }
+
       /* ---- 段落（连续非空行，保留作者换行） ---- */
       var para = [];
-      while (i < lines.length && !isBlockStart(lines[i])) {
+      while (i < lines.length && !isBlockStart(lines[i]) && !isTableStart(i)) {
         para.push(lines[i]);
         i++;
       }

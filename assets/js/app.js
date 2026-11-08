@@ -1001,6 +1001,25 @@
       timeEl.title = READING_HINT;
     }
 
+    /* 2026-11-08 主人要求：标题下这行在「…分钟读完」后面补上标签和评分。
+       顺序跟首页卡片完全一样（日期 · 作者 · 阅读时长 · 标签 · 评分），
+       而且**没有的就不占位** —— 用 bits.join 那套在这儿不合适，meta 是静态 HTML，
+       所以给两段各套一个 hidden 容器，由这里决定放不放出来。 */
+    var tagsWrap = $('#post-meta-tags-wrap');
+    if (tagsWrap) {
+      var tagHtml = (post.tags || []).map(function (t) {
+        return '<span class="tag">' + MD.escape(t) + '</span>';
+      }).join('');
+      tagsWrap.hidden = !tagHtml;
+      $('#post-meta-tags').innerHTML = tagHtml;
+    }
+    var scoreWrap = $('#post-meta-score-wrap');
+    if (scoreWrap) {
+      var badge = scoreBadge(post);
+      scoreWrap.hidden = !badge;
+      $('#post-meta-score').innerHTML = badge;
+    }
+
     // 自己写的标「原创」，和列表卡片上是同一个判据
     var originalEl = $('#post-original');
     if (originalEl) originalEl.hidden = !isOriginal(post);

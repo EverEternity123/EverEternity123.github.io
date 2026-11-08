@@ -460,6 +460,11 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   color: var(--text-3);
 }
 .post-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); opacity: .6; }
+/* 文章页标题下那行的标签 / 评分：外层 .post-meta 的 gap 只管直接子元素，
+   所以这两个 wrap 自己也得是 flex，圆点和内容之间才不会贴死。 */
+#post-meta-tags-wrap,
+#post-meta-score-wrap { display: inline-flex; align-items: center; gap: 10px; }
+#post-meta-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .post-meta .tag {
   color: var(--accent);
   background: var(--accent-soft);
@@ -919,6 +924,53 @@ a.chip:hover { color: var(--accent); border-color: var(--accent-line); transform
   margin: 1.8em auto;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
+}
+
+/* ---------- Markdown 表格 ----------
+   2026-11-08 主人手机端重写的书评里大量用了 `| 维度 | 评分 |` 表格，
+   markdown.js 现在输出 .md-table-wrap > table.md-table。
+   ⚠️ 样式挂在表格**自己**身上，不依赖父容器 —— 正文、AI 折叠块、
+      写作台编辑页预览、列表行内预览四处都要用，父容器选择器各不相同。
+   手机上列多时横向滚动，别把整页撑宽。 */
+.md-table-wrap {
+  margin: 0 0 1.5em;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+}
+.md-table {
+  width: 100%;
+  min-width: 360px;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.md-table th,
+.md-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.md-table th {
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-soft);
+  white-space: nowrap;
+}
+.md-table td { color: var(--text-2); }
+.md-table th strong,
+.md-table td strong { color: var(--text); }
+.md-table tbody tr:last-child td { border-bottom: 0; }
+.md-table a { color: var(--accent); }
+.ai-intro-inner .md-table-wrap { margin: 0 0 1em; }
+.ai-intro-inner .md-table { font-size: 13.5px; }
+.admin-list .row-preview-inner .md-table { font-size: 13px; }
+@media (max-width: 600px) {
+  .md-table { min-width: 320px; font-size: 13px; }
+  .md-table th, .md-table td { padding: 7px 9px; }
 }
 
 /* ---------- 分享：复制文章标题和链接 ---------- */

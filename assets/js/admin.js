@@ -38,6 +38,7 @@
     filterTag: '',    // 列表页当前选中的标签，'' = 全部
     q: '',            // 列表页的搜索词（已转小写），'' = 不搜
     previewId: '',    // 列表里展开了「预览」的那一篇的 id，'' = 都没展开
+    listScroll: 0,    // 离开列表页时的滚动位置（回来时还原，别把人甩回顶部）
     site: null,       // data/site.json 的内容（首页介绍 / 关于页 / 页脚）
     siteSha: null,    // site.json 的 blob sha，提交时必须带上
     order: { ids: [], tags: [] }, // data/order.json 的内容：文章顺序 + 标签顺序
@@ -70,11 +71,39 @@
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3400);
   }
 
-  function show(view) {
+  var currentView = 'connect';
+
+  /* 2026-11-08 主人要求：点「保存并发布」之后别直接跳回列表顶部，
+     要停在页面上「有这篇文章」的那个位置。
+     做法：从列表切走时记下滚动位置；回列表时若传了 anchorId 就按 id 定位到那一行
+     （新建 / 改标题导致顺序变了也能找对），找不到再退回记下的位置。
+     ⚠️ 别的视图（编辑器 / 站点信息 / 标签总览）照旧滚回顶部 ——
+        那些页面很长，带着列表的滚动位置进去会停在半截。
+     ⚠️ renderList() 是在 show() 之前跑的，innerHTML 刚换完还得等一帧布局
+        稳定才有得滚，所以定位放在 requestAnimationFrame 里。 */
+  function show(view, anchorId) {
+    if (currentView === 'list' && view !== 'list') {
+      state.listScroll = window.pageYOffset || 0;
+    }
     ['connect', 'list', 'edit', 'site', 'tags', 'drafts'].forEach(function (v) {
       $('#view-' + v).hidden = (v !== view);
     });
-    window.scrollTo(0, 0);
+    currentView = view;
+
+    if (view !== 'list') { window.scrollTo(0, 0); return; }
+
+    var y = state.listScroll || 0;
+    requestAnimationFrame(function () {
+      var li = null;
+      if (anchorId) {
+        var rows = document.querySelectorAll('#list li[data-id]');
+        for (var k = 0; k < rows.length; k++) {
+          if (rows[k].getAttribute('data-id') === anchorId) { li = rows[k]; break; }
+        }
+      }
+      if (li && li.scrollIntoView) li.scrollIntoView({ block: 'center' });
+      else window.scrollTo(0, y);
+    });
   }
 
   function todayISO() {
@@ -711,8 +740,10 @@
         ? '<span class="pill pill-score" title="值得阅读程度（满分 100）">评分 ' +
           p.score + '</span>'
         : '';
+      /* ⚠️ 2026-11-08 主人要求：评分排在这一行的**最后**（标签后面）。
+         别再塞进 metaStart —— 那样它会夹在日期和作者中间。 */
       var metaStart = '<div class="meta"><span>' + fmtDate(p.date) + '</span>' +
-                      hiddenPill + scorePill;
+                      hiddenPill;
 
       var inner;
       if (!batch) {
@@ -722,7 +753,7 @@
         inner =
           '<div class="info">' +
             '<div class="ttl">' + esc(p.title) + '</div>' +
-            metaStart + author + tags + '</div>' +
+            metaStart + author + tags + scorePill + '</div>' +
           '</div>' +
           '<div class="ops">' +
             '<button class="btn' + (state.previewId === p.id ? ' on' : '') + '"' +
@@ -749,7 +780,7 @@
                 ' data-act="toggle-hidden" title="切换这篇是公开还是隐藏">' +
                 (isHidden ? '已隐藏' : '隐藏') + '</button>' +
             '</div>' +
-            metaStart + author +
+            metaStart + author + scorePill +
               '<div class="ops">' +
                 '<button class="btn btn-move" data-act="top"' +
                   (i === 0 ? ' disabled' : '') + ' title="移到最前">置顶</button>' +
@@ -1999,7 +2030,7 @@
     saveDraft();
     clearTimeout(draftTimer);
     renderList();
-    show('list');
+    show('list', state.editing && state.editing.id);
   }
 
   function doSave() {
@@ -2044,7 +2075,7 @@
         state.original = JSON.parse(JSON.stringify(post));
         state.editing = post;
         renderList();
-        show('list');
+        show('list', post.id);   // 停在刚保存的这一篇，别跳回列表顶部
         var sha = data && data.commit && data.commit.sha ? data.commit.sha.slice(0, 7) : '';
         // ⚠️ 这两句 toast 是**故意分两段**的：
         //    第一段在 posts.json 提交成功时弹，第二段在**产物也写完之后**才弹。

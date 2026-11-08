@@ -255,6 +255,26 @@ html[data-theme="dark"] .btn-danger { color: #ef7a6a; }
 .admin-bar .spacer { flex: 1; }
 .admin-bar .group { display: flex; gap: 8px; align-items: center; }
 
+/* 2026-11-08 主人要求：写作台「返回列表」按钮始终留在页面顶部 ——
+   长文编辑时不用先翻回最上面才能退出。编辑页本来就有 fixed 的底部操作栏
+   （.edit-actions），顶栏冻结之后上下两头都能点，正好配套。
+   ⚠️ top 要避开同样 sticky 的 .site-header（.header-inner 高 62px）。
+   ⚠️ 只冻结带「返回列表」的这几个视图：列表页自己的顶栏按钮多、
+      窄屏还要折成两行，冻起来会白占一截屏幕。
+   ⚠️ 背景必须不透明，否则滚上来的文字会从按钮底下透出来。 */
+#view-edit .admin-bar,
+#view-site .admin-bar,
+#view-tags .admin-bar,
+#view-drafts .admin-bar {
+  position: sticky;
+  top: 62px;
+  z-index: 40;
+  padding: 10px 0;
+  margin-bottom: 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
 /* 顶栏下面那行说明（「首页介绍不在文章里」） */
 .admin-hint {
   margin: 0 0 16px;

@@ -29,7 +29,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon-16.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/css/style.css?v=ab165549">
+<link rel="stylesheet" href="assets/css/style.css?v=b6b35b89">
 <script>
 (function () {
   try {
@@ -100,6 +100,11 @@
       <span id="post-original" hidden><span class="dot"></span><span class="badge-original">原创</span></span>
       <span class="dot"></span>
       <span id="post-time"></span>
+      <!-- 2026-11-08 主人要求：阅读时长后面补标签、评分，顺序跟首页卡片一致。
+           ⚠️ id 别叫 post-tags —— 那个是以前「文章页底部标签栏」的 id，
+              check-content.js 有一条断言钉着它必须不存在。这里在标题下的 meta 行。 -->
+      <span id="post-meta-tags-wrap" hidden><span class="dot"></span><span id="post-meta-tags"></span></span>
+      <span id="post-meta-score-wrap" hidden><span class="dot"></span><span id="post-meta-score"></span></span>
     </div>
   </header>
 
@@ -197,11 +202,11 @@
 <!-- 提示条：复制链接成功 / 失败都走它，2 秒多自己消失 -->
 <div class="toast" id="toast"></div>
 
-<script src="assets/js/markdown.js?v=30496650"></script>
+<script src="assets/js/markdown.js?v=2e9ab1cd"></script>
 <script src="assets/js/site.js?v=37365d83"></script>
 <script src="assets/js/order.js?v=39a74233"></script>
 <script src="assets/js/theme.js?v=a24d0a87"></script>
 <script>window.EE_POST_ID = "p-mu73tt62";</script><!-- p/<id>.html 里会被换成这一篇自己的 id，这样不用靠 ?p= 也能知道是哪篇 -->
-<script src="assets/js/app.js?v=ece05a73"></script>
+<script src="assets/js/app.js?v=624843a7"></script>
 </body>
 </html>
